@@ -1,0 +1,14 @@
+<h2>Encrypted Health Records</h2>
+
+<ul>
+{% for file in files %}
+    <li>
+        {{ file }}
+        <a href="/doctor/access/{{ file }}">Request Access</a>
+    </li>
+{% endfor %}
+</ul>
+
+<br>
+<a href="/doctor">Back to Dashboard</a>
+

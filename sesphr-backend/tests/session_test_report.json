@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-01-08 06:55:35",
+  "duration_sec": 14.49,
+  "overall_status": "PASS",
+  "results": [
+    {
+      "step": "Signup test user",
+      "success": true,
+      "details": "Created user 149e3865-1c90-4624-862b-03490f5871c3"
+    },
+    {
+      "step": "Unauthenticated session check",
+      "success": true,
+      "details": "Expected 401, got 401"
+    },
+    {
+      "step": "Login request",
+      "success": true,
+      "details": "Response: {\"data\":{\"role\":\"doctor\",\"user\":\"149e3865-1c90-4624-862b-03490f5871c3\"},\"error\":null,\"success\":true}\n"
+    },
+    {
+      "step": "Session cookie issued",
+      "success": true,
+      "details": "Cookies present: {'session': 'eyJfcGVybWFuZW50Ijp0cnVlLCJyb2xlIjoiZG9jdG9yIiwidXNlcl9pZCI6IjE0OWUzODY1LTFjOTAtNDYyNC04NjJiLTAzNDkwZjU4NzFjMyJ9.aV8Hhw.cZC3nu5M0gERT8nW0UtckweQMDI'}"
+    },
+    {
+      "step": "Session persists after reload",
+      "success": true,
+      "details": "Response: {\"data\":{\"attributes\":{\"Role\":\"Doctor\"},\"authenticated\":true,\"email\":\"test_doctor_1767835521@example.com\",\"name\":\"Test Doctor\",\"role\":\"doctor\",\"user_id\":\"149e3865-1c90-4624-862b-03490f5871c3\"},\"error\":null,\"success\":true}\n"
+    },
+    {
+      "step": "Attributes loaded in session endpoint",
+      "success": true,
+      "details": "Attributes: {'Role': 'Doctor'}"
+    },
+    {
+      "step": "Protected endpoint access",
+      "success": true,
+      "details": "Status: 200, Body: {\"data\":{\"files\":[{\"enc_filename\":\"demo.txt.enc\",\"filename\":\"demo.txt\",\"owner\":\"patient1\",\"policy\":\"Role:Doctor\"}]},\"error\":null,\"success\":true}\n"
+    },
+    {
+      "step": "Logout request",
+      "success": true,
+      "details": "Response: {\"data\":{\"status\":\"logged_out\"},\"error\":null,\"success\":true}\n"
+    },
+    {
+      "step": "Session invalid after logout",
+      "success": true,
+      "details": "Expected 401, got 401"
+    }
+  ]
+}

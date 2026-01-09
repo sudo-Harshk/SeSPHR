@@ -1,0 +1,17 @@
+venv/
+__pycache__/
+*.pyc
+
+# Local Database
+storage/*.db
+
+# Uploaded Data (Cloud Simulation)
+cloud/data/*.enc
+cloud/meta/*.json
+
+# Audit Logs
+audit/*.log
+
+# IDE
+.vscode/
+.idea/

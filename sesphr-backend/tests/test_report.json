@@ -1,0 +1,157 @@
+{
+  "summary": {
+    "total_tests": 21,
+    "passed": 21,
+    "failed": 0,
+    "execution_time_sec": 96.25
+  },
+  "tests": [
+    {
+      "test_name": "A.1: Unauthenticated access to /api/session",
+      "status": "PASS",
+      "expected": "401 Unauthorized",
+      "actual": "401 Unauthorized",
+      "duration_ms": 2016.49
+    },
+    {
+      "test_name": "A.2: Login as patient",
+      "status": "PASS",
+      "expected": "200 OK with user data",
+      "actual": "200 - {\n  \"data\": {\n    \"data\": {\n      \"role\": \"patient\",\n      \"user\": \"ea141158-e2d2-4bb6-9350-91d007b3",
+      "duration_ms": 2289.46
+    },
+    {
+      "test_name": "A.3: Login as doctor",
+      "status": "PASS",
+      "expected": "200 OK with user data",
+      "actual": "200 - {\n  \"data\": {\n    \"data\": {\n      \"role\": \"doctor\",\n      \"user\": \"ba57080b-e2be-47fa-aff0-6486ca0a9",
+      "duration_ms": 2173.18
+    },
+    {
+      "test_name": "A.4: Login as admin",
+      "status": "PASS",
+      "expected": "200 OK with user data",
+      "actual": "200 - {\n  \"data\": {\n    \"data\": {\n      \"role\": \"admin\",\n      \"user\": \"57fe9b4b-97c0-48b4-9126-bcdb822522",
+      "duration_ms": 2226.96
+    },
+    {
+      "test_name": "A.5: Session persists across requests",
+      "status": "PASS",
+      "expected": "authenticated: true",
+      "actual": "authenticated: True",
+      "duration_ms": 4284.5
+    },
+    {
+      "test_name": "A.6: /api/session returns authenticated = true",
+      "status": "PASS",
+      "expected": "authenticated: true",
+      "actual": "authenticated: True",
+      "duration_ms": 4186.95
+    },
+    {
+      "test_name": "A.7: Logout invalidates session",
+      "status": "PASS",
+      "expected": "Logout returns 200, then session returns 401",
+      "actual": "Logout: 200, Session: 401",
+      "duration_ms": 6281.48
+    },
+    {
+      "test_name": "B.1: Patient uploads PHR file",
+      "status": "PASS",
+      "expected": "200 OK or status: uploaded",
+      "actual": "200 - {\n  \"status\": \"uploaded\"\n}\n",
+      "duration_ms": 4306.4
+    },
+    {
+      "test_name": "B.2: Patient files appear in /api/patient/files",
+      "status": "PASS",
+      "expected": "200 OK with files list",
+      "actual": "200 - Files: 1",
+      "duration_ms": 4225.23
+    },
+    {
+      "test_name": "B.3: Patient revokes access",
+      "status": "PASS",
+      "expected": "200 OK revoke, file still exists",
+      "actual": "200, files after: 1",
+      "duration_ms": 8420.5
+    },
+    {
+      "test_name": "C.1: Doctor fetches /api/doctor/files",
+      "status": "PASS",
+      "expected": "200 OK with files list",
+      "actual": "200 - Files: 1",
+      "duration_ms": 4201.42
+    },
+    {
+      "test_name": "C.2: Doctor accesses authorized file \u2192 GRANTED",
+      "status": "PASS",
+      "expected": "status: granted",
+      "actual": "200 - {\n  \"data\": {\n    \"status\": \"granted\"\n  },\n  \"error\": null,\n  \"success\": true\n}",
+      "duration_ms": 6375.43
+    },
+    {
+      "test_name": "C.3: Doctor accesses unauthorized file \u2192 DENIED",
+      "status": "PASS",
+      "expected": "status: denied or 403",
+      "actual": "403 - {\n  \"data\": null,\n  \"error\": \"Metadata not found\",\n  \"success\": false\n}\n",
+      "duration_ms": 4205.46
+    },
+    {
+      "test_name": "C.4: Secure doctor download (streamed blob)",
+      "status": "PASS",
+      "expected": "Downloaded content matches original (62 bytes)",
+      "actual": "Matched 62 bytes",
+      "duration_ms": 6314.92
+    },
+    {
+      "test_name": "D.1: Admin fetches /api/audit/logs",
+      "status": "PASS",
+      "expected": "200 OK with logs array",
+      "actual": "200 - Logs: 47",
+      "duration_ms": 4290.82
+    },
+    {
+      "test_name": "D.2: Audit logs exist",
+      "status": "PASS",
+      "expected": "Logs array exists",
+      "actual": "Logs count: 47",
+      "duration_ms": 4208.18
+    },
+    {
+      "test_name": "D.3: Audit logs contain both GRANTED and DENIED",
+      "status": "PASS",
+      "expected": "Both GRANTED and DENIED_* entries present",
+      "actual": "GRANTED: 18, DENIED_*: 15",
+      "duration_ms": 4208.11
+    },
+    {
+      "test_name": "D.4: Hash chain integrity verification",
+      "status": "PASS",
+      "expected": "All hashes valid",
+      "actual": "Valid: 47/47, Invalid entries: []",
+      "duration_ms": 4349.84
+    },
+    {
+      "test_name": "E.1: Doctor accessing patient endpoint \u2192 403",
+      "status": "PASS",
+      "expected": "403 Forbidden",
+      "actual": "403 - Forbidden: patient role required",
+      "duration_ms": 4226.91
+    },
+    {
+      "test_name": "E.2: Patient accessing doctor endpoint \u2192 403",
+      "status": "PASS",
+      "expected": "403 Forbidden",
+      "actual": "403 - Forbidden: doctor role required",
+      "duration_ms": 4222.04
+    },
+    {
+      "test_name": "E.3: Non-admin accessing audit logs \u2192 403",
+      "status": "PASS",
+      "expected": "403 Forbidden",
+      "actual": "403 - Forbidden: admin role required",
+      "duration_ms": 4206.0
+    }
+  ]
+}
