@@ -5,9 +5,12 @@ __pycache__/
 # Local Database
 storage/*.db
 
+
 # Uploaded Data (Cloud Simulation)
 cloud/data/*.enc
 cloud/meta/*.json
+cloud/keys/
+
 
 # Audit Logs
 audit/*.log
