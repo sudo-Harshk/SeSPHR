@@ -10,6 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { importPrivateKey, unwrapKey, decryptFile, getSRSKey } from "@/utils/crypto"
 
 const MotionTableRow = motion(TableRow)
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -33,6 +34,8 @@ interface AccessResult {
   filename: string
   status: "granted" | "denied" | null
   message: string | null
+  key_blob?: string
+  iv?: string
 }
 
 export default function DoctorFiles() {
@@ -44,6 +47,25 @@ export default function DoctorFiles() {
   const [accessing, setAccessing] = useState<Set<string>>(new Set())
   const [downloading, setDownloading] = useState<Set<string>>(new Set())
   const [accessResults, setAccessResults] = useState<Map<string, AccessResult>>(new Map())
+  const [doctorPrivateKey, setDoctorPrivateKey] = useState<CryptoKey | null>(null)
+
+  // 1. Fetch Doctor's Private Key on Mount (Simulation of loading from USB token)
+  useEffect(() => {
+    api.get("/debug/my-private-key").then(async (res) => {
+      if (res.data.success && res.data.data?.private_key) {
+        try {
+          const key = await importPrivateKey(res.data.data.private_key)
+          setDoctorPrivateKey(key)
+        } catch (e) {
+          console.error("Failed to import private key", e)
+          setError("Failed to load your private encryption key. Access will be limited.")
+        }
+      }
+    }).catch(() => {
+      // Silently fail or warn?
+      console.warn("Could not fetch private key. Maybe not generated yet?")
+    })
+  }, [])
 
   useEffect(() => {
     const fetchFiles = async () => {
@@ -101,6 +123,8 @@ export default function DoctorFiles() {
             filename,
             status: "granted",
             message: "Access granted successfully",
+            key_blob: response.data.data.key_blob,
+            iv: response.data.data.iv
           })
           return newMap
         })
@@ -165,11 +189,31 @@ export default function DoctorFiles() {
         }
       )
 
-      const blob = response.data instanceof Blob
+      let finalBlob = response.data instanceof Blob
         ? response.data
         : new Blob([response.data], { type: response.headers["content-type"] || "application/octet-stream" })
 
-      const url = window.URL.createObjectURL(blob)
+      // Attempt decryption if keys are available
+      if (accessResult?.key_blob && accessResult?.iv && doctorPrivateKey) {
+        try {
+          const wrappedKey = accessResult.key_blob
+          const iv = accessResult.iv
+
+          // Unwrap AES Key
+          const aesKey = await unwrapKey(wrappedKey, doctorPrivateKey)
+
+          // Decrypt File
+          finalBlob = await decryptFile(finalBlob, aesKey, iv)
+          console.log("File decrypted successfully client-side!")
+        } catch (cryptoError) {
+          console.error("Decryption failed:", cryptoError)
+          alert("Decryption failed! Downloading encrypted file instead.")
+        }
+      } else {
+        console.warn("Missing keys for decryption, downloading raw (likely encrypted) file.")
+      }
+
+      const url = window.URL.createObjectURL(finalBlob)
 
       // content-disposition handling
       const contentDisposition = response.headers["content-disposition"]
@@ -179,6 +223,11 @@ export default function DoctorFiles() {
         if (filenameMatch && filenameMatch[1]) {
           downloadFilename = filenameMatch[1].replace(/['"]/g, "")
         }
+      }
+
+      // If we decrypted it, maybe strip .enc?
+      if (downloadFilename.endsWith(".enc")) {
+        downloadFilename = downloadFilename.replace(".enc", "")
       }
 
       const link = document.createElement("a")
@@ -399,8 +448,8 @@ export default function DoctorFiles() {
                             animate={{ scale: 1, opacity: 1 }}
                             transition={{ duration: 0.2 }}
                             className={`px-2 py-1 rounded-md text-xs font-medium ${isRevoked
-                                ? "bg-red-100 text-red-800 border border-red-200"
-                                : "bg-green-100 text-green-800"
+                              ? "bg-red-100 text-red-800 border border-red-200"
+                              : "bg-green-100 text-green-800"
                               }`}
                           >
                             {file.policy}

@@ -724,6 +724,28 @@ def api_debug_gen_keys(user_id):
 
 
 
+
+@app.route("/api/debug/my-private-key")
+def api_debug_my_private_key():
+    """
+    Debug/MVP-only endpoint: Retrieve the private key for the logged-in user.
+    In production, this would be loaded from a local key file/USB token.
+    """
+    if "user_id" not in session:
+        return api_error("Unauthorized", 401)
+        
+    user_id = session["user_id"]
+    from crypto.keys import CLOUD_KEYS_USERS
+    
+    priv_path = os.path.join(CLOUD_KEYS_USERS, f"{user_id}_private.pem")
+    
+    if os.path.exists(priv_path):
+        with open(priv_path, "r") as f:
+            return api_success({"private_key": f.read()})
+            
+    return api_error("Private key not found. Please generate keys first.", 404)
+
+
 @app.route("/patient")
 def patient_dashboard():
     if session.get("role") != "patient":

@@ -51,10 +51,10 @@ export async function encryptFile(
 ): Promise<{ encryptedBlob: Blob; iv: string }> {
   // Read file as ArrayBuffer
   const fileBuffer = await file.arrayBuffer();
-  
+
   // Generate IV
   const iv = window.crypto.getRandomValues(new Uint8Array(12));
-  
+
   // Encrypt
   const encryptedBuffer = await window.crypto.subtle.encrypt(
     {
@@ -64,11 +64,11 @@ export async function encryptFile(
     key,
     fileBuffer
   );
-  
+
   // Convert IV to Hex for transport
   const ivArray = Array.from(iv);
   const ivHex = ivArray.map(b => b.toString(16).padStart(2, '0')).join('');
-  
+
   return {
     encryptedBlob: new Blob([encryptedBuffer]),
     iv: ivHex
@@ -81,7 +81,7 @@ export async function wrapKey(
 ): Promise<string> {
   // Export AES key to raw bytes
   const rawKey = await window.crypto.subtle.exportKey("raw", aesKey);
-  
+
   // Encrypt (Wrap) the AES key with SRS Public Key
   const wrappedBuffer = await window.crypto.subtle.encrypt(
     {
@@ -90,8 +90,98 @@ export async function wrapKey(
     wrappingKey,
     rawKey
   );
-  
+
   // Convert to Hex string for JSON transport
   const wrappedArray = Array.from(new Uint8Array(wrappedBuffer));
   return wrappedArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+export async function importPrivateKey(pem: string): Promise<CryptoKey> {
+  // 1. Remove header/footer and spaces
+  const pemHeader = "-----BEGIN PRIVATE KEY-----";
+  const pemFooter = "-----END PRIVATE KEY-----";
+
+  // Simple basic parsing
+  let pemContents = pem;
+  if (pem.includes(pemHeader)) {
+    pemContents = pem.substring(
+      pem.indexOf(pemHeader) + pemHeader.length,
+      pem.indexOf(pemFooter)
+    );
+  }
+
+  // base64 decode
+  const binaryDerString = window.atob(pemContents.replace(/\s/g, ""));
+  const binaryDer = new Uint8Array(binaryDerString.length);
+  for (let i = 0; i < binaryDerString.length; i++) {
+    binaryDer[i] = binaryDerString.charCodeAt(i);
+  }
+
+  return window.crypto.subtle.importKey(
+    "pkcs8", // Private keys are usually PKCS8
+    binaryDer.buffer,
+    {
+      name: "RSA-OAEP",
+      hash: "SHA-256", // Must match the hash used during wrapping/encryption
+    },
+    true,
+    ["decrypt"]
+  );
+}
+
+export async function unwrapKey(
+  encryptedKeyHex: string,
+  privateKey: CryptoKey
+): Promise<CryptoKey> {
+  // Convert hex string to ArrayBuffer
+  const encryptedBytes = new Uint8Array(
+    encryptedKeyHex.match(/.{1,2}/g)!.map((byte) => parseInt(byte, 16))
+  );
+
+  // Decrypt the AES Key bytes using RSA Private Key
+  const aesKeyBytes = await window.crypto.subtle.decrypt(
+    {
+      name: "RSA-OAEP"
+    },
+    privateKey,
+    encryptedBytes
+  );
+
+  // Import the raw AES bytes back into a CryptoKey
+  return window.crypto.subtle.importKey(
+    "raw",
+    aesKeyBytes,
+    {
+      name: "AES-GCM",
+      length: 256
+    },
+    true,
+    ["encrypt", "decrypt"]
+  );
+}
+
+export async function decryptFile(
+  encryptedBlob: Blob,
+  aesKey: CryptoKey,
+  ivHex: string
+): Promise<Blob> {
+  // Convert IV Hex to Uint8Array
+  const iv = new Uint8Array(
+    ivHex.match(/.{1,2}/g)!.map((byte) => parseInt(byte, 16))
+  );
+
+  // Get Encrypted Bytes
+  const encryptedBuffer = await encryptedBlob.arrayBuffer();
+
+  // Decrypt
+  const decryptedBuffer = await window.crypto.subtle.decrypt(
+    {
+      name: "AES-GCM",
+      iv: iv
+    },
+    aesKey,
+    encryptedBuffer
+  );
+
+  return new Blob([decryptedBuffer]);
 }
