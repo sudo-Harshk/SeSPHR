@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input"
 import PolicyBuilder from "@/components/PolicyBuilder"
 import ConfirmDialog from "@/components/ConfirmDialog"
 import { useAuth } from "@/context/AuthContext"
+import { getSRSKey, generateAESKey, encryptFile, wrapKey } from "@/utils/crypto"
 
 interface FileItem {
   filename: string
@@ -187,9 +188,25 @@ export default function PatientFiles() {
       setUploadError(null)
       setUploadSuccess(false)
 
+      // 1. Fetch SRS Public Key
+      const srsKey = await getSRSKey()
+
+      // 2. Generate AES Key
+      const aesKey = await generateAESKey()
+
+      // 3. Encrypt File
+      const { encryptedBlob, iv } = await encryptFile(selectedFile, aesKey)
+
+      // 4. Wrap AES Key
+      const wrappedKey = await wrapKey(aesKey, srsKey)
+
+      // 5. Upload
       const formData = new FormData()
-      formData.append("file", selectedFile)
+      // Append encrypted blob with .enc extension to indicate it's encrypted
+      formData.append("file", encryptedBlob, `${selectedFile.name}.enc`)
       formData.append("policy", policy.trim())
+      formData.append("key_blob", wrappedKey)
+      formData.append("iv", iv)
 
       const response = await api.post<UploadResponse>("/patient/upload", formData, {
         headers: {

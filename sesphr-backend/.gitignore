@@ -15,6 +15,18 @@ cloud/keys/
 # Audit Logs
 audit/*.log
 
+# Test Artifacts (Decrypted files, etc)
+tests/web_*
+tests/*.enc
+tests/*.json
+tests/*.txt
+!tests/test_*.py
+
+# Environment
+.env
+.env.local
+
+
 # IDE
 .vscode/
 .idea/

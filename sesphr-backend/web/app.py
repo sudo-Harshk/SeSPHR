@@ -38,7 +38,7 @@ def write_debug_log(location, message, data, hypothesis_id="A", run_id="run1"):
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from storage.phr import store_phr
+from storage.phr import store_encrypted_phr
 from storage.access import access_phr
 from storage.users import (
     create_user, add_attribute, remove_attribute, 
@@ -285,11 +285,15 @@ def api_patient_upload():
 
     file = request.files["file"]
     policy = request.form["policy"]
+    key_blob = request.form.get("key_blob")
+    iv = request.form.get("iv")
+    
+    if not key_blob or not iv:
+        return api_error("Missing encryption parameters (key_blob or iv)", 400)
 
-    file_path = os.path.join("tests", file.filename)
-    file.save(file_path)
-
-    store_phr(session["user_id"], file_path, policy)
+    # Note: We now pass the file object directly, we don't save to 'tests' folder first
+    # Refactored for Blind Storage
+    store_encrypted_phr(session["user_id"], file, policy, key_blob, iv)
 
     # Return standardized success response with file details for UI update
     return api_success({
