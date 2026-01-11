@@ -13,7 +13,8 @@ cloud/keys/
 
 
 # Audit Logs
-audit/
+# Audit Logs
+audit/*.log
 
 # Test Artifacts (Decrypted files, etc)
 tests/web_*

@@ -2,8 +2,10 @@ import json
 import os
 import shutil
 
-CLOUD_DATA = "cloud/data"
-CLOUD_META = "cloud/meta"
+from config import Config
+
+CLOUD_DATA = Config.CLOUD_DATA
+CLOUD_META = Config.CLOUD_META
 
 
 def store_phr(owner_id, file_path, policy):

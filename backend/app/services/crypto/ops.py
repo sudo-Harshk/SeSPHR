@@ -2,7 +2,7 @@ import os
 from Crypto.PublicKey import RSA
 from Crypto.Cipher import PKCS1_OAEP
 from Crypto.Hash import SHA256
-from crypto.keys import get_or_create_srs_key, get_user_public_key
+from app.services.crypto.keys import get_or_create_srs_key, get_user_public_key
 
 def re_encrypt_key(encrypted_key_hex, doctor_user_id):
     """

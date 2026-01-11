@@ -18,6 +18,7 @@ interface ConfirmDialogProps {
   onConfirm: () => void
   onCancel: () => void
   variant?: "default" | "destructive"
+  children?: React.ReactNode
 }
 
 export default function ConfirmDialog({
@@ -29,6 +30,7 @@ export default function ConfirmDialog({
   onConfirm,
   onCancel,
   variant = "default",
+  children,
 }: ConfirmDialogProps) {
   return (
     <AnimatePresence>
@@ -60,6 +62,7 @@ export default function ConfirmDialog({
                 </div>
                 <CardDescription>{description}</CardDescription>
               </CardHeader>
+              {children && <div className="px-6 pb-4">{children}</div>}
               <CardFooter className="flex justify-end gap-2">
                 <Button variant="outline" onClick={onCancel}>
                   {cancelText}

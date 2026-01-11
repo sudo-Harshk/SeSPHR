@@ -77,6 +77,7 @@ export default function PatientFiles() {
   const [revoking, setRevoking] = useState(false)
   const [revokeError, setRevokeError] = useState<string | null>(null)
   const [revokeSuccess, setRevokeSuccess] = useState(false)
+  const [revokeUserId, setRevokeUserId] = useState("")
 
   const normalizeFilename = (name: string) => {
     return name.replace(/\.enc$/, "").replace(/\.json$/, "")
@@ -124,6 +125,7 @@ export default function PatientFiles() {
     setRevokeDialog({ open: true, filename })
     setRevokeError(null)
     setRevokeSuccess(false)
+    setRevokeUserId("")
   }
 
   const handleRevokeConfirm = async () => {
@@ -134,9 +136,12 @@ export default function PatientFiles() {
       setRevokeError(null)
       setRevokeSuccess(false)
 
-      const response = await api.post<RevokeResponse>("/patient/revoke", {
-        filename: revokeDialog.filename,
-      })
+      const payload: any = { filename: revokeDialog.filename }
+      if (revokeUserId.trim()) {
+        payload.revoke_user_id = revokeUserId.trim()
+      }
+
+      const response = await api.post<RevokeResponse>("/patient/revoke", payload)
 
       // Handle standardized API response format: { success: true, data: { status: "revoked" } }
       const status = response.data.data?.status
@@ -145,12 +150,14 @@ export default function PatientFiles() {
         setRevokeSuccess(true)
         setRevokeDialog({ open: false, filename: null })
 
-        // Optimistic Update: Mark as revoked immediately based on success
-        setFiles(prevFiles => prevFiles.map(f =>
-          f.filename === revokeDialog.filename
-            ? { ...f, policy: "Role:__REVOKED__" }
-            : f
-        ))
+        // Optimistic Update: Mark as revoked only if FULL revocation
+        if (!revokeUserId.trim()) {
+          setFiles(prevFiles => prevFiles.map(f =>
+            f.filename === revokeDialog.filename
+              ? { ...f, policy: "Role:__REVOKED__" }
+              : f
+          ))
+        }
 
         // Reset success message after delay
         setTimeout(() => {
@@ -316,7 +323,22 @@ export default function PatientFiles() {
         onConfirm={handleRevokeConfirm}
         onCancel={handleRevokeCancel}
         variant="destructive"
-      />
+      >
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-slate-700">
+            Revoke Specific User (Optional)
+          </label>
+          <Input
+            placeholder="Enter Doctor User ID to block (e.g. 550e84...)"
+            value={revokeUserId}
+            onChange={(e) => setRevokeUserId(e.target.value)}
+            className="text-sm"
+          />
+          <p className="text-xs text-slate-500">
+            Leave empty to revoke access for EVERYONE (Full Revocation).
+          </p>
+        </div>
+      </ConfirmDialog>
 
       <motion.div
         initial={{ opacity: 0, y: -10 }}

@@ -1,11 +1,16 @@
 import sqlite3
 import os
 
-DB_PATH = "storage/sesphr.db"
+from config import Config
+
+DB_PATH = Config.DB_PATH
 
 
 def get_connection():
-    return sqlite3.connect(DB_PATH)
+    # Ensure directory exists just in case (e.g. fresh clone/restructure)
+    if not DB_PATH.parent.exists():
+        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    return sqlite3.connect(str(DB_PATH))
 
 
 def init_db():

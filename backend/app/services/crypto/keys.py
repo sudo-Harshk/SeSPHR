@@ -1,14 +1,17 @@
 import os
 from Crypto.PublicKey import RSA
 
+from config import Config
+
 # Define paths for key storage
-CLOUD_KEYS_SRS = "cloud/keys/srs"
-CLOUD_KEYS_USERS = "cloud/keys/users"
+CLOUD_KEYS_SRS = Config.CLOUD_KEYS_SRS
+CLOUD_KEYS_USERS = Config.CLOUD_KEYS_USERS
 
 # Ensure directories exist
 for directory in [CLOUD_KEYS_SRS, CLOUD_KEYS_USERS]:
-    if not os.path.exists(directory):
-        os.makedirs(directory)
+    # Config already handles mkdir in init_app, but safe to keep here or rely on init
+    if not directory.exists():
+        directory.mkdir(parents=True, exist_ok=True)
 
 def get_or_create_srs_key():
     """

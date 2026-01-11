@@ -10,7 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { importPrivateKey, unwrapKey, decryptFile, getSRSKey } from "@/utils/crypto"
+import { importPrivateKey, unwrapKey, decryptFile } from "@/utils/crypto"
 
 const MotionTableRow = motion(TableRow)
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -270,9 +270,9 @@ export default function DoctorFiles() {
 
     // Map distinct backend outcomes to user-safe messages
     if (status === 403) {
-      if (backendMsg.includes("policy")) return "Access denied by policy"
-      if (backendMsg.includes("role") || backendMsg.includes("permission")) return "Insufficient permissions"
-      return "Access denied"
+      if (backendMsg.includes("revoked")) return "Access Denied by Authority (REVOKED)"
+      if (backendMsg.includes("policy")) return "Access Denied by Policy"
+      return "Access Denied by Authority"
     }
 
     if (status === 400 || status === 404) {
@@ -347,10 +347,21 @@ export default function DoctorFiles() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
       >
-        <h1 className="text-2xl font-bold text-slate-900">Accessible Health Records</h1>
-        <p className="text-slate-600 mt-1">
-          View Personal Health Records you have access to
-        </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">Accessible Health Records</h1>
+            <p className="text-slate-600 mt-1">
+              View Personal Health Records you have access to
+            </p>
+          </div>
+          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium border ${doctorPrivateKey
+            ? "bg-green-50 text-green-700 border-green-200"
+            : "bg-amber-50 text-amber-700 border-amber-200"
+            }`}>
+            <Shield className="w-4 h-4" />
+            {doctorPrivateKey ? "Identity Token Loaded" : "Identity Token Missing"}
+          </div>
+        </div>
       </motion.div>
 
       {/* Access Result Messages */}

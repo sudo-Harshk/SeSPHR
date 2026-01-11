@@ -31,5 +31,20 @@ Thumbs.db
 
 # Project Specific
 Paper/
+
+# Data Storage (Simulation)
+cloud/
+backend/cloud/
+backend/data/
+
+# Databases
 *.db
+backend/app/services/storage/*.db
+
+# Audit Logs
+audit/
+backend/app/services/audit/*.log
+
+# Artifacts
+benchmark_results.csv
 

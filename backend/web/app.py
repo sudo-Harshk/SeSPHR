@@ -739,6 +739,36 @@ def api_debug_gen_keys(user_id):
         return api_error(str(e), 500)
 
 
+@app.route("/api/debug/reset", methods=["POST"])
+def api_debug_reset():
+    """Reset the demo state by clearing cloud storage"""
+    if not app.debug and os.environ.get("FLASK_ENV") != "development":
+        return api_error("Debug only", 403)
+        
+    try:
+        # Clear data directory
+        if os.path.exists("cloud/data"):
+            for f in os.listdir("cloud/data"):
+                file_path = os.path.join("cloud/data", f)
+                if os.path.isfile(file_path):
+                    os.remove(file_path)
+                
+        # Clear meta directory
+        if os.path.exists("cloud/meta"):
+            for f in os.listdir("cloud/meta"):
+                file_path = os.path.join("cloud/meta", f)
+                if os.path.isfile(file_path):
+                    os.remove(file_path)
+                
+        # Clear audit logs
+        if os.path.exists("audit/audit.log"):
+            os.remove("audit/audit.log")
+
+        return api_success({"message": "System reset successfully"})
+    except Exception as e:
+        return api_error(f"Reset failed: {str(e)}", 500)
+
+
 
 
 

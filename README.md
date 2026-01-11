@@ -1,78 +1,44 @@
-# SeSPHR
+# SeSPHR: Secure PHR System with Hybrid Encryption
 
-This project is a Secure Personal Health Record (SeSPHR) system consisting of a Flask backend and a React frontend.
+## Project Structure
+This project is organized into two main components:
 
-## Technology Stack
+*   **`backend/`**: A Flask-based REST API that handles:
+    *   Secure Storage (Hybrid RSA+AES)
+    *   Key Management (Simulated Key Broker/SRS)
+    *   Policy Verification
+    *   Audit Logging
+*   **`frontend/`**: A React + Vite application that serves the Patient, Doctor, and Admin dashboards.
 
-- **Backend:** Python, Flask, SQLite
-- **Frontend:** React, TypeScript, Vite, TailwindCSS
-- **Cryptography:** Argon2 for password hashing, AES for file encryption
+## Getting Started
 
-## Prerequisites
+### Prerequisites
+*   Python 3.10+
+*   Node.js 18+
 
-Ensure you have the following installed:
-- Python 3.8 or higher
-- Node.js 16 or higher
-- npm (Node Package Manager)
+### 1. Backend Setup
+```bash
+cd backend
+python -m venv venv
+# Windows
+.\venv\Scripts\activate
+# Linux/Mac
+source venv/bin/activate
 
-## Installation
+pip install -r requirements.txt
+python run.py
+```
+*   Server runs at `http://localhost:5000`.
 
-### Backend Setup
+### 2. Frontend Setup
+```bash
+cd frontend
+npm install
+npm run dev
+```
+*   App runs at `http://localhost:5173`.
 
-1. Navigate to the backend directory:
-   ```bash
-   cd sesphr-backend
-   ```
-
-2. Create a virtual environment:
-   ```bash
-   python -m venv venv
-   ```
-
-3. Activate the virtual environment:
-   - On Windows:
-     ```bash
-     venv\Scripts\activate
-     ```
-   - On macOS/Linux:
-     ```bash
-     source venv/bin/activate
-     ```
-
-4. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-### Frontend Setup
-
-1. Navigate to the frontend directory:
-   ```bash
-   cd sesphr-frontend
-   ```
-
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-
-## Running the Project
-
-### Starting the Backend
-
-1. Make sure your virtual environment is activated.
-2. Navigate to the backend directory.
-3. Run the Flask application:
-   ```bash
-   python web/app.py
-   ```
-   The backend will start at `http://localhost:5000`.
-
-### Starting the Frontend
-
-1. Navigate to the frontend directory.
-2. Start the development server:
-   ```bash
-   npm run dev
-   ```
-   The frontend will be accessible at the URL provided in the terminal (usually `http://localhost:5173`).
+## Architecture Notes
+*   **App Factory**: The backend uses the Flask Application Factory pattern (`app/__init__.py`).
+*   **Modular Services**: Core logic resides in `backend/app/services/` (Crypto, Storage, Policy).
+*   **Blueprints**: API routes are split into modules in `backend/app/api/`.
