@@ -10,14 +10,15 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from web.app import app
-from crypto.keys import get_or_create_srs_key
+from app import create_app
+from app.services.crypto.keys import get_or_create_srs_key
 
 class TestModule2(unittest.TestCase):
     def setUp(self):
         os.environ["FLASK_ENV"] = "development"
-        self.app = app.test_client()
-        self.app.testing = True
+        self.flask_app = create_app('default')
+        self.app = self.flask_app.test_client()
+        self.flask_app.testing = True
         
         # Ensure we have a user
         self.user_id = "test_patient_mod2"

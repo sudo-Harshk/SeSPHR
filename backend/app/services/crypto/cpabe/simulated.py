@@ -25,8 +25,8 @@ real CP-ABE implementation (e.g., using Charm, OpenABE, or similar libraries).
 """
 
 import json
-from policy.parser import evaluate_policy
-from crypto.cpabe.interfaces import CPABEBackend
+from app.services.policy.parser import evaluate_policy
+from app.services.crypto.cpabe.interfaces import CPABEBackend
 
 
 class SimulatedCPABE(CPABEBackend):

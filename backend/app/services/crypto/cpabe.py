@@ -1,5 +1,5 @@
 import json
-from policy.parser import evaluate_policy
+from app.services.policy.parser import evaluate_policy
 
 
 def encrypt_key(aes_key_bytes, policy):

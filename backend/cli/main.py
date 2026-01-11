@@ -6,14 +6,17 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from storage.users import (
+from app.services.storage.users import (
     create_user,
     add_attribute,
     remove_attribute,
-    load_users
+    # load_users # Note: load_users wasn't in users.py I saw earlier using get_all_users_with_attributes?
+    # Checking users.py in Step 214: it has get_all_users_with_attributes but NOT load_users.
+    # So CLI is broken regardless of path if load_users is missing.
+    get_all_users_with_attributes
 )
-from storage.phr import store_phr
-from storage.access import access_phr
+from app.services.storage.phr import store_phr
+from app.services.storage.access import access_phr
 
 
 def main():
@@ -60,7 +63,7 @@ def main():
         print("Attribute removed")
 
     elif args.command == "list_users":
-        users = load_users()
+        users = get_all_users_with_attributes()
         for u in users.values():
             print(u)
 

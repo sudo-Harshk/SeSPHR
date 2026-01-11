@@ -27,6 +27,10 @@ def api_signup():
     try:
         user_id = create_user(email, password, role, name)
         
+        # Generate keys for the new user immediately
+        from app.services.crypto.keys import generate_user_keys
+        generate_user_keys(user_id)
+        
         response_data = {"email": email, "role": role}
         if os.environ.get("FLASK_ENV") == "development":
             response_data["user_id"] = user_id

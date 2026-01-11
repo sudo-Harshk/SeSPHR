@@ -1,50 +1,82 @@
-# IDEs
+# --- Global Security Rules (CRITICAL) ---
+# Block all cryptographic keys
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Block all encrypted data files
+*.enc
+
+# Block all local databases
+*.db
+*.sqlite
+*.sqlite3
+
+# --- Project Structure & Dependencies ---
+
+# Editor / IDE
 .vscode/
 .idea/
 .cursor/
 *.swp
 *.swo
+.DS_Store
+Thumbs.db
 
-# Dependencies
+# Root Dependencies
 node_modules/
 venv/
-.env
 .venv/
 env/
-__pycache__/
 
-# Build
-dist/
-build/
-*.egg-info/
+# --- Backend Specific ---
+backend/venv/
+backend/.venv/
+backend/__pycache__/
+backend/*.pyc
+backend/instance/
+backend/.env
+backend/.pytest_cache/
+backend/benchmark_results.csv
+backend/test_record_v1.txt
 
-# Logs
+# Backend Cloud Storage (Simulation)
+# Allow structure (.gitkeep) but block content
+backend/cloud/keys/*
+!backend/cloud/keys/.gitkeep
+backend/cloud/data/*
+!backend/cloud/data/.gitkeep
+backend/cloud/meta/*
+!backend/cloud/meta/.gitkeep
+# Fallback
+backend/cloud/*
+!backend/cloud/.gitkeep
+
+# Backend Services specific ignores
+backend/app/services/storage/*.db
+backend/app/services/audit/*.log
+
+# --- Frontend Specific ---
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/coverage/
+frontend/.env
+frontend/.env.*
+
+# --- Root Cloud Directory (Legacy/Global) ---
+cloud/keys/*
+!cloud/keys/.gitkeep
+cloud/data/*
+!cloud/data/.gitkeep
+cloud/meta/*
+!cloud/meta/.gitkeep
+cloud/*
+!cloud/.gitkeep
+
+# --- Miscellaneous ---
 logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
-yarn-error.log*
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Project Specific
-Paper/
-
-# Data Storage (Simulation)
-cloud/
-backend/cloud/
-backend/data/
-
-# Databases
-*.db
-backend/app/services/storage/*.db
-
-# Audit Logs
-audit/
-backend/app/services/audit/*.log
-
-# Artifacts
-benchmark_results.csv
-

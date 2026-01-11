@@ -1,19 +1,28 @@
 import json
 import os
 import sys
-from crypto.aes import decrypt_file
-from crypto.cpabe.core import decrypt_aes_key
-from policy.parser import evaluate_policy
-from audit.logger import log_event
+import json
+import os
+import sys
+from app.services.crypto.aes import decrypt_file
+from app.services.crypto.cpabe.core import decrypt_aes_key
+from app.services.policy.parser import evaluate_policy
+from app.services.audit.logger import log_event
+from config import Config
 
-CLOUD_DATA = "cloud/data"
-CLOUD_META = "cloud/meta"
+CLOUD_DATA = Config.CLOUD_DATA
+CLOUD_META = Config.CLOUD_META
 
 
 def access_phr(user_id, enc_file, output_path):
-    meta_path = os.path.join(CLOUD_META, enc_file.replace(".enc", ".json"))
+    # This seems to be a CLI-only or legacy Access function using CP-ABE Core directly?
+    # Our web app uses Hybrid (RSA+AES) with SRS.
+    # We should probably update this to support Hybrid or just fix imports for legacy.
+    # Fixing imports for now.
+    
+    meta_path = CLOUD_META / enc_file.replace(".enc", ".json")
 
-    if not os.path.exists(meta_path):
+    if not meta_path.exists():
         log_event(user_id, enc_file, "ACCESS", "INVALID_REQUEST")
         raise FileNotFoundError("Metadata not found")
 
@@ -22,13 +31,15 @@ def access_phr(user_id, enc_file, output_path):
 
     try:
         # Load user attributes dynamically
-        from storage.users import get_user_attributes
+        from app.services.storage.users import get_user_attributes
         attrs = get_user_attributes(user_id)
         
         # Create user object for policy evaluation
-        from policy.models import User
-        user = User(user_id, attrs)
+        from types import SimpleNamespace
+        user = SimpleNamespace(user_id=user_id, attributes=attrs)
         
+        # Note: decrypt_aes_key (CP-ABE) is used here. 
+        # Ideally CLI should also support SRS/Hybrid if we want it to work with web uploads.
         aes_key = decrypt_aes_key(meta["aes_key"], user)
     except Exception:
         log_event(user_id, enc_file, "ACCESS", "DENIED_POLICY")

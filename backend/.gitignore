@@ -1,33 +1,55 @@
+# --- Global Security (Catch-all) ---
+*.pem
+*.key
+*.p12
+*.pfx
+*.enc
+*.db
+*.sqlite3
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
 venv/
-**/__pycache__/
-*.pyc
+env/
+.venv/
+instance/
+.instance
+.pytest_cache/
+htmlcov/
+tests/coverage
 
-# Local Database
-storage/*.db
+# --- Settings ---
+.env
+.env.*
+config_local.py
 
+# --- Cloud Simulation (Granular) ---
+# Allow folders to exist for structure, but ignore sensitive content
+cloud/keys/*
+!cloud/keys/.gitkeep
+cloud/data/*
+!cloud/data/.gitkeep
+cloud/meta/*
+!cloud/meta/.gitkeep
+# Fallback
+cloud/*
+!cloud/.gitkeep
 
-# Uploaded Data (Cloud Simulation)
-cloud/data/
-cloud/meta/
-cloud/keys/
-
-
-# Audit Logs
-# Audit Logs
+# --- Logs ---
+*.log
 audit/*.log
+app/services/audit/*.log
 
-# Test Artifacts (Decrypted files, etc)
-tests/web_*
+# --- Tests & Artifacts ---
 tests/*.enc
 tests/*.json
 tests/*.txt
 !tests/test_*.py
+benchmark_results.csv
+test_record_v1.txt
 
-# Environment
-.env
-.env.local
-
-
-# IDE
+# --- IDE ---
 .vscode/
 .idea/

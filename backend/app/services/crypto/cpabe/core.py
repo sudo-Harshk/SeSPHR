@@ -16,7 +16,7 @@ Separation of Concerns:
 - Access Control: Enforced through CP-ABE cryptographic operations
 """
 
-from crypto.cpabe.simulated import SimulatedCPABE
+from app.services.crypto.cpabe.simulated import SimulatedCPABE
 
 # Backend instance - can be swapped with real CP-ABE implementation
 # For production: Replace SimulatedCPABE() with RealCPABE() or similar

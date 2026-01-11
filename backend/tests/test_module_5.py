@@ -14,15 +14,20 @@ import io
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from web.app import app
-from crypto.keys import get_or_create_srs_key, get_user_public_key, generate_user_keys
-from storage.users import create_user
+from app import create_app
+from app.services.crypto.keys import get_or_create_srs_key, get_user_public_key, generate_user_keys
+from app.services.storage.users import create_user
 
 class TestModule5(unittest.TestCase):
     def setUp(self):
         os.environ["FLASK_ENV"] = "development"
-        self.app = app.test_client()
-        self.app.testing = True
+        self.flask_app = create_app('default')
+        self.app = self.flask_app.test_client()
+        self.flask_app.testing = True
+
+        # Initialize DB
+        ctx = self.flask_app.app_context()
+        ctx.push()
         
         # Define Test Users
         self.patient_id = "test_patient_mod5"

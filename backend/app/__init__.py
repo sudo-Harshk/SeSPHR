@@ -9,6 +9,9 @@ def create_app(config_name='default'):
     app.config.from_object(config[config_name])
     config[config_name].init_app(app)
     
+    # Enable CORS for frontend integration
+    CORS(app, supports_credentials=True, resources={r"/api/*": {"origins": "*"}}) # Allow all origins for dev simplicity, or specify localhost:5173
+    
     # Register Blueprints
     from .api import auth, patient, doctor, admin, debug, common
     
