@@ -18,12 +18,13 @@ def verify_password(stored_hash, password):
     except VerifyMismatchError:
         return False
 
-def create_user(email, password, role, name=None):
+def create_user(email, password, role, name=None, user_id=None):
     if role not in ALLOWED_ROLES:
         raise ValueError(f"Invalid role. Allowed: {ALLOWED_ROLES}")
     
-    # Generate UUID
-    user_id = str(uuid.uuid4())
+    # Generate UUID if not provided
+    if not user_id:
+        user_id = str(uuid.uuid4())
     password_hash = hash_password(password)
     
     conn = get_connection()
