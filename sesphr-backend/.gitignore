@@ -7,13 +7,13 @@ storage/*.db
 
 
 # Uploaded Data (Cloud Simulation)
-cloud/data/*.enc
-cloud/meta/*.json
+cloud/data/
+cloud/meta/
 cloud/keys/
 
 
 # Audit Logs
-audit/*.log
+audit/
 
 # Test Artifacts (Decrypted files, etc)
 tests/web_*

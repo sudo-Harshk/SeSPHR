@@ -356,31 +356,44 @@ def api_patient_revoke():
         audit_deny(session["user_id"], filename, "DENIED_OWNER")
         return api_error("Forbidden: not file owner", 403)
     
-    # ✅ REVOKE = change policy only (AES key remains unchanged)
-    # This preserves cryptographic correctness and file recoverability
-    meta["policy"] = "Role:__REVOKED__"
     
-    # CRITICAL SECURITY FIX:
-    # Also update the policy inside the "encrypted" key blob.
-    # Since we are using SimulatedCPABE, the blob is JSON and contains the policy.
-    # If we don't update this, the crypto/access layer will still see the OLD policy 
-    # (e.g. "Role:Doctor") inside the blob and grant access!
-    try:
-        key_blob = json.loads(meta["aes_key"])
-        key_blob["policy"] = "Role:__REVOKED__"
-        meta["aes_key"] = json.dumps(key_blob)
-    except Exception as e:
-        # Should not happen in simulation, but log if blob is corrupt
-        print(f"REVOCATION WARNING: Failed to update key blob: {e}", file=sys.stderr)
+    # Check for granular revocation
+    revoke_user_id = data.get("revoke_user_id")
+    if revoke_user_id:
+        # Granular Revocation: Add to revoked_users list
+        revoked_list = meta.get("revoked_users", [])
+        if revoke_user_id not in revoked_list:
+            revoked_list.append(revoke_user_id)
+        meta["revoked_users"] = revoked_list
+        # Don't change the main policy or key blob, just the blacklist
+        
+        # Audit log specific
+        from audit.logger import log_event
+        log_event(session["user_id"], filename, "REVOKE_USER", f"Revoked {revoke_user_id}")
+    else:
+        # Full Revocation = change policy only (AES key remains unchanged)
+        # This preserves cryptographic correctness and file recoverability
+        meta["policy"] = "Role:__REVOKED__"
+        
+        # CRITICAL SECURITY FIX:
+        # Also update the policy inside the "encrypted" key blob.
+        # Since we are using SimulatedCPABE, the blob is JSON and contains the policy.
+        # If we don't update this, the crypto/access layer will still see the OLD policy 
+        # (e.g. "Role:Doctor") inside the blob and grant access!
+        try:
+            key_blob = json.loads(meta["aes_key"])
+            key_blob["policy"] = "Role:__REVOKED__"
+            meta["aes_key"] = json.dumps(key_blob)
+        except Exception as e:
+            # Should not happen in simulation, but log if blob is corrupt
+            print(f"REVOCATION WARNING: Failed to update key blob: {e}", file=sys.stderr)
+        
+        from audit.logger import log_event
+        log_event(session["user_id"], filename, "REVOKE", "SUCCESS")
     
-    # Save updated metadata
     # Save updated metadata
     with open(meta_path, "w") as f:
         json.dump(meta, f, indent=2)
-    
-    # Audit log
-    from audit.logger import log_event
-    log_event(session["user_id"], filename, "REVOKE", "SUCCESS")
     
     return api_success({"status": "revoked", "filename": filename})
 
@@ -511,7 +524,12 @@ def api_doctor_access():
             audit_deny(session["user_id"], filename, "DENIED_POLICY")
             return api_error("Access denied: policy not satisfied", 403)
 
-        # 2. SRS Re-Encryption (Key Broker)
+        # 2. Check Granular Revocation
+        if session["user_id"] in meta.get("revoked_users", []):
+            audit_deny(session["user_id"], filename, "DENIED_REVOKED")
+            return api_error("Access denied: You have been revoked by the owner", 403)
+
+        # 3. SRS Re-Encryption (Key Broker)
         # Verify mode
         if meta.get("mode") == "client_side_encryption":
             key_blob = meta.get("key_blob")
