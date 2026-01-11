@@ -47,7 +47,9 @@ from storage.users import (
 )
 from storage.db import get_connection, init_db
 from web.utils import api_success, api_error
+from web.utils import api_success, api_error
 from audit.logger import audit_deny
+from crypto.keys import get_or_create_srs_key, get_user_public_key, generate_user_keys
 
 app = Flask(__name__)
 # CORS(app, supports_credentials=True, origins=["http://localhost:5173"])  # Disabled for dev - using Vite proxy instead
@@ -602,6 +604,29 @@ def api_audit_logs():
         return api_error(f"Failed to read audit logs: {str(e)}", 500)
 
 
+@app.route("/api/srs/public-key")
+def api_srs_public_key():
+    """Return the SRS Public Key (PEM)"""
+    try:
+        _, public_key_pem = get_or_create_srs_key()
+        return api_success({"public_key": public_key_pem.decode("utf-8")})
+    except Exception as e:
+        return api_error(f"Failed to retrieve SRS key: {str(e)}", 500)
+
+
+@app.route("/api/debug/gen-keys/<user_id>", methods=["POST"])
+def api_debug_gen_keys(user_id):
+    """Debug endpoint to generate keys for a specific user"""
+    if not app.debug and os.environ.get("FLASK_ENV") != "development":
+         return api_error("Debug only", 403)
+         
+    try:
+        generate_user_keys(user_id)
+        return api_success({"message": f"Keys generated for {user_id}"})
+    except Exception as e:
+        return api_error(str(e), 500)
+
+
 
 
 
@@ -741,4 +766,8 @@ if __name__ == "__main__":
         run_id="run1"
     )
     # #endregion
+    # Initialize SRS identity
+    print("Initializing SRS Keys...", file=sys.stderr)
+    get_or_create_srs_key()
+    
     app.run(host="localhost", port=5000, debug=True)
