@@ -13,6 +13,7 @@ import DoctorFiles from "@/pages/doctor/DoctorFiles"
 import AdminDashboard from "@/pages/admin/AdminDashboard"
 import AdminAuditLogs from "@/pages/admin/AdminAuditLogs"
 import AdminUsers from "@/pages/admin/AdminUsers"
+import Landing from "@/pages/Landing"
 
 import { Toaster } from "sonner"
 
@@ -25,7 +26,7 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
-        <Route path="/" element={<Navigate to="/login" replace />} />
+        <Route path="/" element={<Landing />} />
 
         <Route
           path="/patient"

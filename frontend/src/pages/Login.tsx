@@ -62,13 +62,11 @@ export default function Login() {
               initial={{ scale: 0.9 }}
               animate={{ scale: 1 }}
               transition={{ delay: 0.1, type: "spring", stiffness: 200 }}
-              className="flex items-center justify-center mb-2"
+              className="flex items-center justify-center mb-4"
             >
-              <div className="p-3 bg-blue-100 rounded-full">
-                <LogIn className="w-6 h-6 text-blue-600" />
-              </div>
+              <img src="/logo.png" alt="SeSPHR" className="h-14 w-auto object-contain" />
             </motion.div>
-            <CardTitle className="text-2xl text-center">SeSPHR Login</CardTitle>
+            <CardTitle className="text-2xl text-center">Login</CardTitle>
             <CardDescription className="text-center">
               Sign in to access your health records
             </CardDescription>

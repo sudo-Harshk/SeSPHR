@@ -28,14 +28,14 @@ export default function Sidebar({ role }: SidebarProps) {
 
   return (
     <div className="w-64 bg-slate-900 text-white flex flex-col p-4">
-      <motion.h2
-        className="text-xl font-bold mb-6"
+      <motion.div
+        className="mb-6 px-2"
         initial={{ opacity: 0, x: -20 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.3 }}
       >
-        SeSPHR
-      </motion.h2>
+        <img src="/logo-transparent.png" alt="SeSPHR" className="h-10 w-auto object-contain" />
+      </motion.div>
 
       <nav className="space-y-1 flex-1">
         {links[role]?.map(({ to, label, icon: Icon }, index) => (

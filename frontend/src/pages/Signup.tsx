@@ -4,7 +4,7 @@ import { motion } from "framer-motion"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Loader2, UserPlus, CheckCircle2, AlertCircle, Eye, EyeOff } from "lucide-react"
+import { Loader2, CheckCircle2, AlertCircle, Eye, EyeOff } from "lucide-react"
 import api from "@/services/api"
 import { AnimatePresence } from "framer-motion"
 
@@ -93,10 +93,8 @@ export default function Signup() {
       >
         <Card className="shadow-2xl border-0">
           <CardHeader className="space-y-3 pb-6">
-            <div className="flex items-center justify-center">
-              <div className="p-2.5 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg">
-                <UserPlus className="w-5 h-5 text-white" />
-              </div>
+            <div className="flex items-center justify-center mb-2">
+              <img src="/logo.png" alt="SeSPHR" className="h-14 w-auto object-contain" />
             </div>
             <CardTitle className="text-2xl font-semibold text-center text-slate-900">
               Create Account
