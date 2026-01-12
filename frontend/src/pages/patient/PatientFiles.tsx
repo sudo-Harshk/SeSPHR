@@ -15,7 +15,7 @@ const MotionTableRow = motion.create(TableRow)
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import PolicyBuilder from "@/components/PolicyBuilder"
+
 import ConfirmDialog from "@/components/ConfirmDialog"
 import { useAuth } from "@/context/AuthContext"
 import { getSRSKey, generateAESKey, encryptFile, wrapKey } from "@/utils/crypto"
@@ -61,7 +61,7 @@ export default function PatientFiles() {
 
   // Upload form state
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [policy, setPolicy] = useState("")
+
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [uploadSuccess, setUploadSuccess] = useState(false)
@@ -182,8 +182,8 @@ export default function PatientFiles() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!selectedFile || !policy.trim()) {
-      setUploadError("Please select a file and enter a policy")
+    if (!selectedFile) {
+      setUploadError("Please select a file")
       return
     }
 
@@ -208,7 +208,8 @@ export default function PatientFiles() {
       const formData = new FormData()
       // Append encrypted blob with .enc extension to indicate it's encrypted
       formData.append("file", encryptedBlob, `${selectedFile.name}.enc`)
-      formData.append("policy", policy.trim())
+      const p = "Role:Doctor"
+      formData.append("policy", p)
       formData.append("key_blob", wrappedKey)
       formData.append("iv", iv)
 
@@ -233,7 +234,6 @@ export default function PatientFiles() {
 
         // Reset form
         setSelectedFile(null)
-        setPolicy("")
         const fileInput = document.getElementById("file-input") as HTMLInputElement
         if (fileInput) fileInput.value = ""
 
@@ -384,20 +384,14 @@ export default function PatientFiles() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">
-                  Access Policy
-                </label>
-                <PolicyBuilder
-                  value={policy}
-                  onChange={(newPolicy) => {
-                    setPolicy(newPolicy)
-                    setUploadError(null)
-                    setUploadSuccess(false)
-                  }}
-                />
-                <p className="text-xs text-slate-500">
-                  Build an access policy by selecting attributes and values
-                </p>
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-md">
+                  <p className="text-sm font-medium text-slate-900">
+                    Role:Doctor
+                  </p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Automatically restricted to Registered Doctors.
+                  </p>
+                </div>
               </div>
 
               <AnimatePresence>
@@ -429,7 +423,7 @@ export default function PatientFiles() {
                 )}
               </AnimatePresence>
 
-              <Button type="submit" disabled={uploading || !selectedFile || !policy.trim()}>
+              <Button type="submit" disabled={uploading || !selectedFile}>
                 {uploading ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin mr-2" />

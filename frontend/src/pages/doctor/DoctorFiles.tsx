@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
-import { FileText, Loader2, CheckCircle2, XCircle, Shield, Download } from "lucide-react"
+import { FileText, Loader2, CheckCircle2, XCircle, Shield, Eye, Download } from "lucide-react"
+import FilePreviewModal from "@/components/FilePreviewModal"
 import { motion, AnimatePresence } from "framer-motion"
 import api from "@/services/api"
 import {
@@ -46,9 +47,23 @@ export default function DoctorFiles() {
 
   // Concurrent state management using Sets
   const [accessing, setAccessing] = useState<Set<string>>(new Set())
+  const [restoring, setRestoring] = useState<Set<string>>(new Set())
   const [downloading, setDownloading] = useState<Set<string>>(new Set())
   const [accessResults, setAccessResults] = useState<Map<string, AccessResult>>(new Map())
   const [doctorPrivateKey, setDoctorPrivateKey] = useState<CryptoKey | null>(null)
+
+  // Preview State
+  const [previewFile, setPreviewFile] = useState<{
+    isOpen: boolean
+    fileUrl: string | null
+    filename: string
+    mimeType: string
+  }>({
+    isOpen: false,
+    fileUrl: null,
+    filename: "",
+    mimeType: "",
+  })
 
   // 1. Fetch Doctor's Private Key on Mount (Simulation of loading from USB token)
   useEffect(() => {
@@ -103,7 +118,7 @@ export default function DoctorFiles() {
         // Only trigger if we haven't already checked (to avoid infinite loops or re-checking active ones)
         filenames.forEach(f => {
           if (!accessResults.has(f) && files.some(file => file.filename === f)) {
-            handleAccess(f) // Pass flag to indicate this is a restore
+            handleAccess(f, true) // Pass flag to indicate this is a restore
           }
         })
       } catch (e) {
@@ -112,16 +127,24 @@ export default function DoctorFiles() {
     }
   }, [files]) // Run when files list loads
 
-  const handleAccess = async (filename: string) => {
+  const handleAccess = async (filename: string, isRestore = false) => {
     // Prevent multiple simultaneous access attempts for the same file
-    if (accessing.has(filename)) return
+    if (accessing.has(filename) || restoring.has(filename)) return
 
     try {
-      setAccessing((prev) => {
-        const next = new Set(prev)
-        next.add(filename)
-        return next
-      })
+      if (isRestore) {
+        setRestoring((prev) => {
+          const next = new Set(prev)
+          next.add(filename)
+          return next
+        })
+      } else {
+        setAccessing((prev) => {
+          const next = new Set(prev)
+          next.add(filename)
+          return next
+        })
+      }
 
       // Reset previous result state for this file
       setAccessResults((prev) => {
@@ -183,37 +206,31 @@ export default function DoctorFiles() {
         return newMap
       })
     } finally {
-      setAccessing((prev) => {
-        const next = new Set(prev)
-        next.delete(filename)
-        return next
-      })
+      if (isRestore) {
+        setRestoring((prev) => {
+          const next = new Set(prev)
+          next.delete(filename)
+          return next
+        })
+      } else {
+        setAccessing((prev) => {
+          const next = new Set(prev)
+          next.delete(filename)
+          return next
+        })
+      }
     }
   }
 
-  const handleDownload = async (filename: string) => {
-    // Security check: Only allow download if access was previously granted
+  // Helper for decryption
+  const fetchAndDecryptFile = async (filename: string): Promise<{ blob: Blob, filename: string } | null> => {
     const accessResult = accessResults.get(filename)
     if (accessResult?.status !== "granted") {
-      return
+      return null
     }
 
-    if (downloading.has(filename)) return
-
     try {
-      setDownloading((prev) => {
-        const next = new Set(prev)
-        next.add(filename)
-        return next
-      })
-
-      // STRICT CONTRACT: Send filename exactly as received.
-      // Use query param download=true for file retrieval
-      // Use the file_url provided by access grant, or fallback to construction
-      // The file_url from backend points to the encrypted file download
       let downloadUrl = accessResult?.file_url || `/doctor/download/${filename}.enc`
-
-      // Axios baseURL is "/api", so if backend returned /api/..., we must strip it to avoid /api/api/...
       if (downloadUrl.startsWith("/api")) {
         downloadUrl = downloadUrl.substring(4)
       }
@@ -226,29 +243,18 @@ export default function DoctorFiles() {
         ? response.data
         : new Blob([response.data], { type: response.headers["content-type"] || "application/octet-stream" })
 
-      // Attempt decryption if keys are available
       if (accessResult?.key_blob && accessResult?.iv && doctorPrivateKey) {
         try {
           const wrappedKey = accessResult.key_blob
           const iv = accessResult.iv
-
-          // Unwrap AES Key
           const aesKey = await unwrapKey(wrappedKey, doctorPrivateKey)
-
-          // Decrypt File
           finalBlob = await decryptFile(finalBlob, aesKey, iv)
-          console.log("File decrypted successfully client-side!")
         } catch (cryptoError) {
           console.error("Decryption failed:", cryptoError)
-          alert("Decryption failed! Downloading encrypted file instead.")
+          alert("Decryption failed! Using raw file.")
         }
-      } else {
-        console.warn("Missing keys for decryption, downloading raw (likely encrypted) file.")
       }
 
-      const url = window.URL.createObjectURL(finalBlob)
-
-      // content-disposition handling
       const contentDisposition = response.headers["content-disposition"]
       let downloadFilename = filename
       if (contentDisposition) {
@@ -257,39 +263,75 @@ export default function DoctorFiles() {
           downloadFilename = filenameMatch[1].replace(/['"]/g, "")
         }
       }
-
-      // If we decrypted it, maybe strip .enc?
       if (downloadFilename.endsWith(".enc")) {
         downloadFilename = downloadFilename.replace(".enc", "")
       }
 
-      const link = document.createElement("a")
-      link.href = url
-      link.download = downloadFilename
-      document.body.appendChild(link)
-      link.click()
-
-      document.body.removeChild(link)
-      window.URL.revokeObjectURL(url)
+      return { blob: finalBlob, filename: downloadFilename }
     } catch (err: any) {
-      // SECURITY CRITICAL: Downgrade access status if download fails (policy re-eval)
-      const message = getFriendlyErrorMessage(err, "Download failed")
+      console.error("Fetch failed", err)
+      throw err
+    }
+  }
 
+  const handleView = async (filename: string) => {
+    if (downloading.has(filename)) return
+
+    try {
+      setDownloading((prev) => { const next = new Set(prev); next.add(filename); return next; })
+
+      const result = await fetchAndDecryptFile(filename)
+      if (!result) return
+
+      const url = window.URL.createObjectURL(result.blob)
+
+      setPreviewFile({
+        isOpen: true,
+        fileUrl: url,
+        filename: result.filename,
+        mimeType: result.blob.type
+      })
+
+    } catch (err: any) {
+      const message = getFriendlyErrorMessage(err, "View failed")
       setAccessResults((prev) => {
         const newMap = new Map(prev)
-        newMap.set(filename, {
-          filename,
-          status: "denied",
-          message,
-        })
+        newMap.set(filename, { filename, status: "denied", message })
         return newMap
       })
     } finally {
-      setDownloading((prev) => {
-        const next = new Set(prev)
-        next.delete(filename)
-        return next
+      setDownloading((prev) => { const next = new Set(prev); next.delete(filename); return next; })
+    }
+  }
+
+  const handleDownload = async (filename: string) => {
+    if (downloading.has(filename)) return
+
+    try {
+      setDownloading((prev) => { const next = new Set(prev); next.add(filename); return next; })
+
+      const result = await fetchAndDecryptFile(filename)
+      if (!result) return
+
+      const url = window.URL.createObjectURL(result.blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = result.filename
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+
+      setTimeout(() => window.URL.revokeObjectURL(url), 1000)
+
+    } catch (err: any) {
+      const message = getFriendlyErrorMessage(err, "Download failed")
+      setAccessResults((prev) => {
+        const newMap = new Map(prev)
+        newMap.set(filename, { filename, status: "denied", message })
+        return newMap
       })
+    } finally {
+      setDownloading((prev) => { const next = new Set(prev); next.delete(filename); return next; })
     }
   }
 
@@ -464,6 +506,7 @@ export default function DoctorFiles() {
                 {files.map((file, index) => {
                   const isRevoked = file.policy?.toUpperCase().includes("REVOKED")
                   const isAccessing = accessing.has(file.filename)
+                  const isRestoring = restoring.has(file.filename)
                   const isDownloading = downloading.has(file.filename)
                   const accessResult = accessResults.get(file.filename)
                   const isGranted = accessResult?.status === "granted"
@@ -506,73 +549,86 @@ export default function DoctorFiles() {
                         <div className="flex items-center justify-end gap-2">
                           <motion.div
                             key={`${file.filename}-${accessResult?.status || "none"}`}
-                            initial={isGranted || isDenied ? { scale: 0.8, opacity: 0 } : false}
-                            animate={isGranted || isDenied ? { scale: 1, opacity: 1 } : false}
-                            transition={{ duration: 0.3, type: "spring", stiffness: 400 }}
+                            initial={false}
+                            animate={{ scale: 1, opacity: 1 }}
+                            transition={{ duration: 0.3 }}
                           >
-                            <Button
-                              variant={isRevoked ? "ghost" : isGranted ? "default" : isDenied ? "destructive" : "outline"}
-                              size="sm"
-                              onClick={() => handleAccess(file.filename)}
-                              disabled={isAccessing || !!isRevoked}
-                              className="gap-2"
-                            >
-                              {isAccessing ? (
-                                <>
-                                  <Loader2 className="w-3 h-3 animate-spin" />
-                                  Checking...
-                                </>
-                              ) : isGranted ? (
-                                <>
-                                  <CheckCircle2 className="w-3 h-3" />
-                                  Granted
-                                </>
-                              ) : isDenied ? (
-                                <>
-                                  <XCircle className="w-3 h-3" />
-                                  Denied
-                                </>
-                              ) : isRevoked ? (
-                                <>
-                                  <XCircle className="w-3 h-3" />
-                                  Revoked
-                                </>
-                              ) : (
-                                <>
-                                  <Shield className="w-3 h-3" />
-                                  Access
-                                </>
-                              )}
-                            </Button>
-                          </motion.div>
+                            {/* Access / View Button Logic
+                                 1. Not Accessed: Show "Access" (Shield)
+                                 2. Accessing: Show "Checking..." (Loader)
+                                 3. Granted: Show "View" (Eye) - This replaces the static "Granted" button
+                                 4. Denied: Show "Denied" (XCircle)
+                                 5. Revoked: Show "Revoked" (XCircle) 
+                             */}
 
-                          {isGranted && (
-                            <motion.div
-                              initial={{ scale: 0.8, opacity: 0 }}
-                              animate={{ scale: 1, opacity: 1 }}
-                              transition={{ duration: 0.3, type: "spring", stiffness: 400 }}
-                            >
+                            {isGranted ? (
+                              <div className="flex gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleView(file.filename)}
+                                  disabled={isDownloading}
+                                  className="gap-2 bg-green-50 text-green-700 border-green-200 hover:bg-green-100 hover:text-green-800"
+                                >
+                                  {isDownloading ? (
+                                    <>
+                                      <Loader2 className="w-3 h-3 animate-spin" />
+                                      Loading...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Eye className="w-3 h-3" />
+                                      View
+                                    </>
+                                  )}
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleDownload(file.filename)}
+                                  disabled={isDownloading}
+                                  className="gap-2"
+                                >
+                                  <Download className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            ) : (
                               <Button
-                                variant="outline"
+                                variant={isRevoked ? "ghost" : isDenied ? "destructive" : "outline"}
                                 size="sm"
-                                onClick={() => handleDownload(file.filename)}
-                                disabled={isDownloading}
+                                onClick={() => handleAccess(file.filename)}
+                                disabled={isAccessing || isRestoring || !!isRevoked}
                                 className="gap-2"
                               >
-                                {isDownloading ? (
+                                {isRestoring ? (
                                   <>
                                     <Loader2 className="w-3 h-3 animate-spin" />
-                                    Downloading...
+                                    Re-verifying...
+                                  </>
+                                ) : isAccessing ? (
+                                  <>
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                    Checking...
+                                  </>
+                                ) : isDenied ? (
+                                  <>
+                                    <XCircle className="w-3 h-3" />
+                                    Denied
+                                  </>
+                                ) : isRevoked ? (
+                                  <>
+                                    <XCircle className="w-3 h-3" />
+                                    Revoked
                                   </>
                                 ) : (
                                   <>
-                                    <Download className="w-3 h-3" />
-                                    Download
+                                    <Shield className="w-3 h-3" />
+                                    Access
                                   </>
                                 )}
                               </Button>
-                            </motion.div>
-                          )}
+                            )}
+                          </motion.div>
                         </div>
                       </TableCell>
                     </MotionTableRow>
@@ -583,6 +639,17 @@ export default function DoctorFiles() {
           </CardContent>
         </Card>
       </motion.div>
+
+      <FilePreviewModal
+        isOpen={previewFile.isOpen}
+        onClose={() => {
+          if (previewFile.fileUrl) window.URL.revokeObjectURL(previewFile.fileUrl)
+          setPreviewFile({ ...previewFile, isOpen: false, fileUrl: null })
+        }}
+        fileUrl={previewFile.fileUrl}
+        filename={previewFile.filename}
+        mimeType={previewFile.mimeType}
+      />
     </div>
   )
 }

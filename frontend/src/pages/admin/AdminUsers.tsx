@@ -7,8 +7,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+
 import {
   Table,
   TableBody,
@@ -20,12 +19,8 @@ import {
 import {
   Users,
   Key,
-  Trash2,
   Loader2,
-  CheckCircle2,
   AlertCircle,
-  Plus,
-  X,
 } from "lucide-react"
 import api from "@/services/api"
 
@@ -47,16 +42,10 @@ export default function AdminUsers() {
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState<string | null>(null)
+
 
   // Add attribute form state
-  const [showAddAttribute, setShowAddAttribute] = useState<string | null>(null)
-  const [newAttributeKey, setNewAttributeKey] = useState("")
-  const [newAttributeValue, setNewAttributeValue] = useState("")
-  const [addingAttribute, setAddingAttribute] = useState(false)
 
-  // Remove attribute state
-  const [removingAttribute, setRemovingAttribute] = useState<string | null>(null)
 
   const fetchUsers = async () => {
     try {
@@ -81,74 +70,7 @@ export default function AdminUsers() {
     fetchUsers()
   }, [])
 
-  const handleAddAttribute = async (user_id: string) => {
-    if (!newAttributeKey.trim() || !newAttributeValue.trim()) {
-      setError("Key and value are required")
-      return
-    }
 
-    try {
-      setAddingAttribute(true)
-      setError(null)
-      setSuccess(null)
-
-      const response = await api.post("/admin/attributes", {
-        action: "add",
-        user_id,
-        key: newAttributeKey.trim(),
-        value: newAttributeValue.trim(),
-      })
-
-      if (response.data.success) {
-        setSuccess(`Attribute "${newAttributeKey}:${newAttributeValue}" added successfully`)
-        setNewAttributeKey("")
-        setNewAttributeValue("")
-        setShowAddAttribute(null)
-        fetchUsers()
-        setTimeout(() => setSuccess(null), 3000)
-      } else {
-        setError(response.data.error || "Failed to add attribute")
-      }
-    } catch (err: any) {
-      setError(
-        err.response?.data?.error ||
-        err.response?.data?.message ||
-        "Failed to add attribute"
-      )
-    } finally {
-      setAddingAttribute(false)
-    }
-  }
-
-  const handleRemoveAttribute = async (user_id: string, key: string) => {
-    try {
-      setRemovingAttribute(`${user_id}:${key}`)
-      setError(null)
-      setSuccess(null)
-
-      const response = await api.post("/admin/attributes", {
-        action: "remove",
-        user_id,
-        key,
-      })
-
-      if (response.data.success) {
-        setSuccess(`Attribute "${key}" removed successfully`)
-        fetchUsers()
-        setTimeout(() => setSuccess(null), 3000)
-      } else {
-        setError(response.data.error || "Failed to remove attribute")
-      }
-    } catch (err: any) {
-      setError(
-        err.response?.data?.error ||
-        err.response?.data?.message ||
-        "Failed to remove attribute"
-      )
-    } finally {
-      setRemovingAttribute(null)
-    }
-  }
 
   if (loading) {
     return (
@@ -175,21 +97,7 @@ export default function AdminUsers() {
         </p>
       </motion.div>
 
-      {/* Success/Error Messages */}
-      <AnimatePresence>
-        {success && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.3 }}
-            className="p-3 bg-green-50 border border-green-200 rounded-md flex items-center gap-2"
-          >
-            <CheckCircle2 className="w-4 h-4 text-green-600" />
-            <p className="text-sm text-green-600">{success}</p>
-          </motion.div>
-        )}
-      </AnimatePresence>
+
 
       <AnimatePresence>
         {error && (
@@ -245,7 +153,6 @@ export default function AdminUsers() {
                       <TableHead>User ID</TableHead>
                       <TableHead>Role</TableHead>
                       <TableHead>Attributes</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -283,67 +190,7 @@ export default function AdminUsers() {
                             )}
                           </div>
                         </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            {showAddAttribute === user.user_id ? (
-                              <div className="flex items-center gap-2 p-2 bg-slate-50 rounded-md">
-                                <Input
-                                  placeholder="Key"
-                                  value={newAttributeKey}
-                                  onChange={(e) => setNewAttributeKey(e.target.value)}
-                                  className="h-8 w-24 text-sm"
-                                  disabled={addingAttribute}
-                                />
-                                <Input
-                                  placeholder="Value"
-                                  value={newAttributeValue}
-                                  onChange={(e) => setNewAttributeValue(e.target.value)}
-                                  className="h-8 w-24 text-sm"
-                                  disabled={addingAttribute}
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter") {
-                                      handleAddAttribute(user.user_id)
-                                    }
-                                  }}
-                                />
-                                <Button
-                                  size="sm"
-                                  onClick={() => handleAddAttribute(user.user_id)}
-                                  disabled={addingAttribute}
-                                  className="h-8"
-                                >
-                                  {addingAttribute ? (
-                                    <Loader2 className="w-3 h-3 animate-spin" />
-                                  ) : (
-                                    <Plus className="w-3 h-3" />
-                                  )}
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => {
-                                    setShowAddAttribute(null)
-                                    setNewAttributeKey("")
-                                    setNewAttributeValue("")
-                                  }}
-                                  className="h-8"
-                                >
-                                  <X className="w-3 h-3" />
-                                </Button>
-                              </div>
-                            ) : (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => setShowAddAttribute(user.user_id)}
-                                className="gap-1"
-                              >
-                                <Plus className="w-3 h-3" />
-                                Add Attribute
-                              </Button>
-                            )}
-                          </div>
-                        </TableCell>
+
                       </motion.tr>
                     ))}
                   </TableBody>
@@ -355,71 +202,61 @@ export default function AdminUsers() {
       </motion.div>
 
       {/* Attributes Detail Cards */}
-      {users.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2, duration: 0.4 }}
-          className="grid grid-cols-1 md:grid-cols-2 gap-4"
-        >
-          {users.map((user, userIndex) => (
-            <motion.div
-              key={user.user_id}
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.3 + userIndex * 0.1 }}
-            >
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">{user.user_id}</CardTitle>
-                  <CardDescription>
-                    {Object.keys(user.attributes).length} attribute
-                    {Object.keys(user.attributes).length !== 1 ? "s" : ""}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {Object.keys(user.attributes).length === 0 ? (
-                    <p className="text-sm text-slate-500">No attributes assigned</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {Object.entries(user.attributes).map(([key, value], attrIndex) => (
-                        <motion.div
-                          key={`${key}:${value}`}
-                          initial={{ opacity: 0, x: -10 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: attrIndex * 0.05 }}
-                          className="flex items-center justify-between p-2 bg-slate-50 rounded-md"
-                        >
-                          <div className="flex items-center gap-2">
-                            <Key className="w-4 h-4 text-slate-400" />
-                            <span className="text-sm font-medium text-slate-900">
-                              {key}: <span className="text-slate-600">{value}</span>
-                            </span>
-                          </div>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleRemoveAttribute(user.user_id, key)}
-                            disabled={removingAttribute === `${user.user_id}:${key}`}
-                            className="h-7 w-7 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+      {
+        users.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2, duration: 0.4 }}
+            className="grid grid-cols-1 md:grid-cols-2 gap-4"
+          >
+            {users.map((user, userIndex) => (
+              <motion.div
+                key={user.user_id}
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.3 + userIndex * 0.1 }}
+              >
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">{user.user_id}</CardTitle>
+                    <CardDescription>
+                      {Object.keys(user.attributes).length} attribute
+                      {Object.keys(user.attributes).length !== 1 ? "s" : ""}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {Object.keys(user.attributes).length === 0 ? (
+                      <p className="text-sm text-slate-500">No attributes assigned</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {Object.entries(user.attributes).map(([key, value], attrIndex) => (
+                          <motion.div
+                            key={`${key}:${value}`}
+                            initial={{ opacity: 0, x: -10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: attrIndex * 0.05 }}
+                            className="flex items-center justify-between p-2 bg-slate-50 rounded-md"
                           >
-                            {removingAttribute === `${user.user_id}:${key}` ? (
-                              <Loader2 className="w-3 h-3 animate-spin" />
-                            ) : (
-                              <Trash2 className="w-3 h-3" />
-                            )}
-                          </Button>
-                        </motion.div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </motion.div>
-          ))}
-        </motion.div>
-      )}
-    </div>
+                            <div className="flex items-center gap-2">
+                              <Key className="w-4 h-4 text-slate-400" />
+                              <span className="text-sm font-medium text-slate-900">
+                                {key}: <span className="text-slate-600">{value}</span>
+                              </span>
+                            </div>
+
+                          </motion.div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ))}
+          </motion.div>
+        )
+      }
+    </div >
   )
 }
 
