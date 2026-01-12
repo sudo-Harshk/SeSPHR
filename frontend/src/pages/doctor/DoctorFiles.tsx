@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
-import { FileText, Loader2, CheckCircle2, XCircle, Shield, Eye, Download } from "lucide-react"
+import { FileText, Loader2, Shield, Eye, Download, XCircle } from "lucide-react"
 import FilePreviewModal from "@/components/FilePreviewModal"
-import { motion, AnimatePresence } from "framer-motion"
+import { motion } from "framer-motion"
 import api from "@/services/api"
 import {
   Table,
@@ -12,10 +12,11 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { importPrivateKey, unwrapKey, decryptFile } from "@/utils/crypto"
-
-const MotionTableRow = motion.create(TableRow)
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { toast } from "sonner"
+
+const MotionTableRow = motion.create(TableRow)
 
 interface FileItem {
   filename: string
@@ -34,7 +35,6 @@ interface ApiResponse {
 interface AccessResult {
   filename: string
   status: "granted" | "denied" | null
-  message: string | null
   key_blob?: string
   iv?: string
   file_url?: string
@@ -65,7 +65,7 @@ export default function DoctorFiles() {
     mimeType: "",
   })
 
-  // 1. Fetch Doctor's Private Key on Mount (Simulation of loading from USB token)
+  // 1. Fetch Doctor's Private Key on Mount
   useEffect(() => {
     api.get("/debug/my-private-key").then(async (res) => {
       if (res.data.success && res.data.data?.private_key) {
@@ -74,11 +74,10 @@ export default function DoctorFiles() {
           setDoctorPrivateKey(key)
         } catch (e) {
           console.error("Failed to import private key", e)
-          setError("Failed to load your private encryption key. Access will be limited.")
+          toast.error("Failed to load your private encryption key. Access will be limited.")
         }
       }
     }).catch(() => {
-      // Silently fail or warn?
       console.warn("Could not fetch private key. Maybe not generated yet?")
     })
   }, [])
@@ -91,7 +90,6 @@ export default function DoctorFiles() {
         const response = await api.get<ApiResponse>("/doctor/files")
 
         if (response.data.success && response.data.data?.files) {
-          // Backend returns normalized filenames; use exactly as is.
           setFiles(response.data.data.files)
         } else {
           setError(response.data.error || "Failed to load files")
@@ -107,7 +105,7 @@ export default function DoctorFiles() {
     fetchFiles()
   }, [])
 
-  // Auto-restore access for previously unlocked files
+  // Auto-restore access
   useEffect(() => {
     if (files.length === 0 || accessing.size > 0) return
 
@@ -115,49 +113,35 @@ export default function DoctorFiles() {
     if (restored) {
       try {
         const filenames: string[] = JSON.parse(restored)
-        // Only trigger if we haven't already checked (to avoid infinite loops or re-checking active ones)
         filenames.forEach(f => {
           if (!accessResults.has(f) && files.some(file => file.filename === f)) {
-            handleAccess(f, true) // Pass flag to indicate this is a restore
+            handleAccess(f, true)
           }
         })
       } catch (e) {
         // Ignore parsing errors
       }
     }
-  }, [files]) // Run when files list loads
+  }, [files])
 
   const handleAccess = async (filename: string, isRestore = false) => {
-    // Prevent multiple simultaneous access attempts for the same file
     if (accessing.has(filename) || restoring.has(filename)) return
 
     try {
       if (isRestore) {
-        setRestoring((prev) => {
-          const next = new Set(prev)
-          next.add(filename)
-          return next
-        })
+        setRestoring((prev) => { const next = new Set(prev); next.add(filename); return next; })
       } else {
-        setAccessing((prev) => {
-          const next = new Set(prev)
-          next.add(filename)
-          return next
-        })
+        setAccessing((prev) => { const next = new Set(prev); next.add(filename); return next; })
       }
 
-      // Reset previous result state for this file
       setAccessResults((prev) => {
         const newMap = new Map(prev)
-        newMap.set(filename, { filename, status: null, message: null })
+        // Reset or clear previous entry if needed, but 'granted' state is what matters
+        if (!isRestore) newMap.delete(filename)
         return newMap
       })
 
-      // STRICT CONTRACT: Send filename exactly as received.
-      const response = await api.post("/doctor/access", {
-        file: filename,
-      })
-
+      const response = await api.post("/doctor/access", { file: filename })
       const status = response.data.data?.status
 
       if (response.data.success && status === "granted") {
@@ -166,78 +150,67 @@ export default function DoctorFiles() {
           newMap.set(filename, {
             filename,
             status: "granted",
-            message: "Access granted successfully",
             key_blob: response.data.data.key_blob,
             iv: response.data.data.iv,
             file_url: response.data.data.file_url
           })
 
-          // Persist to session storage
           const currentUnlocked = JSON.parse(sessionStorage.getItem("unlocked_files") || "[]")
           if (!currentUnlocked.includes(filename)) {
             sessionStorage.setItem("unlocked_files", JSON.stringify([...currentUnlocked, filename]))
           }
-
           return newMap
         })
+
+        if (!isRestore) {
+          toast.success(`Access GRANTED for ${filename}`)
+        }
+
       } else if (status === "denied" || response.data.status === "denied") {
+        const reason = response.data.reason || "Access denied"
         setAccessResults((prev) => {
           const newMap = new Map(prev)
-          newMap.set(filename, {
-            filename,
-            status: "denied",
-            message: response.data.reason || "Access denied",
-          })
+          newMap.set(filename, { filename, status: "denied" })
           return newMap
         })
+
+        if (!isRestore) {
+          toast.error(`Access DENIED: ${reason}`)
+        }
       } else {
         throw new Error(response.data.error || "Unknown response")
       }
     } catch (err: any) {
       const message = getFriendlyErrorMessage(err)
-
       setAccessResults((prev) => {
         const newMap = new Map(prev)
-        newMap.set(filename, {
-          filename,
-          status: "denied",
-          message,
-        })
+        newMap.set(filename, { filename, status: "denied" })
         return newMap
       })
+
+      if (!isRestore) {
+        toast.error(`Access DENIED: ${message}`)
+      }
     } finally {
       if (isRestore) {
-        setRestoring((prev) => {
-          const next = new Set(prev)
-          next.delete(filename)
-          return next
-        })
+        setRestoring((prev) => { const next = new Set(prev); next.delete(filename); return next; })
       } else {
-        setAccessing((prev) => {
-          const next = new Set(prev)
-          next.delete(filename)
-          return next
-        })
+        setAccessing((prev) => { const next = new Set(prev); next.delete(filename); return next; })
       }
     }
   }
 
-  // Helper for decryption
   const fetchAndDecryptFile = async (filename: string): Promise<{ blob: Blob, filename: string } | null> => {
     const accessResult = accessResults.get(filename)
-    if (accessResult?.status !== "granted") {
-      return null
-    }
+    if (accessResult?.status !== "granted") return null
 
     try {
       let downloadUrl = accessResult?.file_url || `/doctor/download/${filename}.enc`
-      if (downloadUrl.startsWith("/api")) {
-        downloadUrl = downloadUrl.substring(4)
-      }
+      if (downloadUrl.startsWith("/api")) downloadUrl = downloadUrl.substring(4)
 
-      const response = await api.get(downloadUrl, {
-        responseType: "blob",
-      })
+      console.time("1. Network Download")
+      const response = await api.get(downloadUrl, { responseType: "blob" })
+      console.timeEnd("1. Network Download")
 
       let finalBlob = response.data instanceof Blob
         ? response.data
@@ -245,30 +218,35 @@ export default function DoctorFiles() {
 
       if (accessResult?.key_blob && accessResult?.iv && doctorPrivateKey) {
         try {
+          console.time("2. Decryption")
           const wrappedKey = accessResult.key_blob
           const iv = accessResult.iv
           const aesKey = await unwrapKey(wrappedKey, doctorPrivateKey)
           finalBlob = await decryptFile(finalBlob, aesKey, iv)
+          console.timeEnd("2. Decryption")
         } catch (cryptoError) {
+          console.timeEnd("2. Decryption") // Ensure we close timer on error
           console.error("Decryption failed:", cryptoError)
-          alert("Decryption failed! Using raw file.")
+          toast.warning("Decryption failed! Using raw file.")
         }
       }
 
       const contentDisposition = response.headers["content-disposition"]
       let downloadFilename = filename
       if (contentDisposition) {
-        const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
-        if (filenameMatch && filenameMatch[1]) {
-          downloadFilename = filenameMatch[1].replace(/['"]/g, "")
-        }
+        const match = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
+        if (match && match[1]) downloadFilename = match[1].replace(/['"]/g, "")
       }
-      if (downloadFilename.endsWith(".enc")) {
-        downloadFilename = downloadFilename.replace(".enc", "")
+      if (downloadFilename.endsWith(".enc")) downloadFilename = downloadFilename.replace(".enc", "")
+
+      // Force valid MIME type for PDFs so the browser can render it
+      if (downloadFilename.toLowerCase().endsWith(".pdf")) {
+        finalBlob = new Blob([finalBlob], { type: "application/pdf" })
       }
 
       return { blob: finalBlob, filename: downloadFilename }
     } catch (err: any) {
+      console.timeEnd("1. Network Download") // Ensure we close timer on error
       console.error("Fetch failed", err)
       throw err
     }
@@ -279,12 +257,11 @@ export default function DoctorFiles() {
 
     try {
       setDownloading((prev) => { const next = new Set(prev); next.add(filename); return next; })
-
       const result = await fetchAndDecryptFile(filename)
       if (!result) return
 
       const url = window.URL.createObjectURL(result.blob)
-
+      console.time("3. PDF Render")
       setPreviewFile({
         isOpen: true,
         fileUrl: url,
@@ -294,11 +271,7 @@ export default function DoctorFiles() {
 
     } catch (err: any) {
       const message = getFriendlyErrorMessage(err, "View failed")
-      setAccessResults((prev) => {
-        const newMap = new Map(prev)
-        newMap.set(filename, { filename, status: "denied", message })
-        return newMap
-      })
+      toast.error(message)
     } finally {
       setDownloading((prev) => { const next = new Set(prev); next.delete(filename); return next; })
     }
@@ -309,7 +282,6 @@ export default function DoctorFiles() {
 
     try {
       setDownloading((prev) => { const next = new Set(prev); next.add(filename); return next; })
-
       const result = await fetchAndDecryptFile(filename)
       if (!result) return
 
@@ -320,44 +292,30 @@ export default function DoctorFiles() {
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
-
       setTimeout(() => window.URL.revokeObjectURL(url), 1000)
+      toast.success("File downloaded successfully")
 
     } catch (err: any) {
       const message = getFriendlyErrorMessage(err, "Download failed")
-      setAccessResults((prev) => {
-        const newMap = new Map(prev)
-        newMap.set(filename, { filename, status: "denied", message })
-        return newMap
-      })
+      toast.error(message)
     } finally {
       setDownloading((prev) => { const next = new Set(prev); next.delete(filename); return next; })
     }
   }
 
-  // Helper to map backend errors to user-friendly messages
   const getFriendlyErrorMessage = (err: any, defaultMsg: string = "Access denied"): string => {
     if (!err.response) return defaultMsg
-
     const status = err.response.status
     const data = err.response.data
     const backendMsg = (data?.error || data?.reason || data?.message || "").toLowerCase()
 
-    // Map distinct backend outcomes to user-safe messages
     if (status === 403) {
       if (backendMsg.includes("revoked")) return "Access Denied by Authority (REVOKED)"
       if (backendMsg.includes("policy")) return "Access Denied by Policy"
       return "Access Denied by Authority"
     }
-
-    if (status === 400 || status === 404) {
-      return "File unavailable"
-    }
-
-    if (status === 401) {
-      return "Authentication required"
-    }
-
+    if (status === 400 || status === 404) return "File unavailable"
+    if (status === 401) return "Authentication required"
     return backendMsg || defaultMsg
   }
 
@@ -377,9 +335,7 @@ export default function DoctorFiles() {
       <div className="space-y-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Accessible Health Records</h1>
-          <p className="text-slate-600 mt-1">
-            View Personal Health Records you have access to
-          </p>
+          <p className="text-slate-600 mt-1">View Personal Health Records you have access to</p>
         </div>
         <Card>
           <CardHeader>
@@ -396,19 +352,13 @@ export default function DoctorFiles() {
       <div className="space-y-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Accessible Health Records</h1>
-          <p className="text-slate-600 mt-1">
-            View Personal Health Records you have access to
-          </p>
+          <p className="text-slate-600 mt-1">View Personal Health Records you have access to</p>
         </div>
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <FileText className="w-12 h-12 text-slate-400 mb-4" />
-            <h3 className="text-lg font-semibold text-slate-900 mb-2">
-              No accessible files
-            </h3>
-            <p className="text-sm text-slate-600">
-              There are no Personal Health Records available for you to access at this time.
-            </p>
+            <h3 className="text-lg font-semibold text-slate-900 mb-2">No accessible files</h3>
+            <p className="text-sm text-slate-600">There are no Personal Health Records available for you to access at this time.</p>
           </CardContent>
         </Card>
       </div>
@@ -425,9 +375,7 @@ export default function DoctorFiles() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-slate-900">Accessible Health Records</h1>
-            <p className="text-slate-600 mt-1">
-              View Personal Health Records you have access to
-            </p>
+            <p className="text-slate-600 mt-1">View Personal Health Records you have access to</p>
           </div>
           <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium border ${doctorPrivateKey
             ? "bg-green-50 text-green-700 border-green-200"
@@ -439,47 +387,6 @@ export default function DoctorFiles() {
         </div>
       </motion.div>
 
-      {/* Access Result Messages */}
-      <AnimatePresence>
-        {Array.from(accessResults.values())
-          .filter((result) => result.status !== null)
-          .map((result) => (
-            <motion.div
-              key={result.filename}
-              initial={{ opacity: 0, y: -10, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -10, scale: 0.95 }}
-              transition={{ duration: 0.3 }}
-              className={`p-3 border rounded-md flex items-start gap-2 ${result.status === "granted"
-                ? "bg-green-50 border-green-200"
-                : "bg-red-50 border-red-200"
-                }`}
-            >
-              {result.status === "granted" ? (
-                <CheckCircle2 className="w-4 h-4 text-green-600 mt-0.5" />
-              ) : (
-                <XCircle className="w-4 h-4 text-red-600 mt-0.5" />
-              )}
-              <div className="flex-1">
-                <p
-                  className={`text-sm font-medium ${result.status === "granted" ? "text-green-900" : "text-red-900"
-                    }`}
-                >
-                  {result.filename}
-                </p>
-                <p
-                  className={`text-sm ${result.status === "granted" ? "text-green-700" : "text-red-700"
-                    }`}
-                >
-                  {result.status === "granted"
-                    ? "✓ Access GRANTED"
-                    : `✗ Access DENIED: ${result.message}`}
-                </p>
-              </div>
-            </motion.div>
-          ))}
-      </AnimatePresence>
-
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -488,9 +395,7 @@ export default function DoctorFiles() {
         <Card>
           <CardHeader>
             <CardTitle>Files</CardTitle>
-            <CardDescription>
-              {files.length} {files.length === 1 ? "file" : "files"} accessible
-            </CardDescription>
+            <CardDescription>{files.length} {files.length === 1 ? "file" : "files"} accessible</CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
@@ -553,14 +458,6 @@ export default function DoctorFiles() {
                             animate={{ scale: 1, opacity: 1 }}
                             transition={{ duration: 0.3 }}
                           >
-                            {/* Access / View Button Logic
-                                 1. Not Accessed: Show "Access" (Shield)
-                                 2. Accessing: Show "Checking..." (Loader)
-                                 3. Granted: Show "View" (Eye) - This replaces the static "Granted" button
-                                 4. Denied: Show "Denied" (XCircle)
-                                 5. Revoked: Show "Revoked" (XCircle) 
-                             */}
-
                             {isGranted ? (
                               <div className="flex gap-2">
                                 <Button

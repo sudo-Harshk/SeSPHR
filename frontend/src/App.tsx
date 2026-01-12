@@ -14,11 +14,14 @@ import AdminDashboard from "@/pages/admin/AdminDashboard"
 import AdminAuditLogs from "@/pages/admin/AdminAuditLogs"
 import AdminUsers from "@/pages/admin/AdminUsers"
 
+import { Toaster } from "sonner"
+
 export default function App() {
   const auth = useAuth()
 
   return (
     <BrowserRouter>
+      <Toaster richColors position="top-right" />
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
