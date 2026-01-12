@@ -1,5 +1,0 @@
-This is a test file for verifying the upload functionality of SeSPHR.
-It contains some sensitive health information that should be encrypted.
-Patient: Test Patient
-Condition: Healthy
-Policy: Role:Doctor

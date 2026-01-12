@@ -3,7 +3,8 @@ import os
 from pathlib import Path
 
 class Config:
-    BASE_DIR = Path(__file__).parent.parent
+    # config.py is in backend/, so parent is backend/.
+    BASE_DIR = Path(__file__).parent
     
     # Storage Paths
     CLOUD_DIR = BASE_DIR / "cloud"
@@ -13,11 +14,7 @@ class Config:
     CLOUD_KEYS_USERS = CLOUD_DIR / "keys" / "users"
     
     # Audit
-    AUDIT_DIR = BASE_DIR / "app" / "services" / "audit" # Actually tests write to app/services/audit? 
-    # The original structure had audit/ at root of backend.
-    # We moved audit/ to app/services/audit.
-    # So logs should probably go to a var directory or stay local.
-    # Let's keep logs in a 'logs' dir in root for cleanliness, or just inside the service for now.
+    AUDIT_DIR = BASE_DIR / "app" / "services" / "audit" 
     AUDIT_LOG_PATH = BASE_DIR / "app" / "services" / "audit" / "audit.log"
     
     # DB

@@ -47,18 +47,24 @@ def generate_user_keys(user_id):
     Generate RSA keypair for a specific user.
     Saves to disk and returns (priv_pem, pub_pem).
     """
+    print(f"DEBUG: Generating keys for {user_id}")
     key = RSA.generate(2048)
-    private_pem = key.export_key()
+    # Export as PKCS#8 for compatibility with Web Crypto API (frontend)
+    private_pem = key.export_key(pkcs=8)
     public_pem = key.publickey().export_key()
 
     priv_path = os.path.join(CLOUD_KEYS_USERS, f"{user_id}_private.pem")
     pub_path = os.path.join(CLOUD_KEYS_USERS, f"{user_id}_public.pem")
+    
+    print(f"DEBUG: Writing to {priv_path}")
 
     with open(priv_path, "wb") as f:
         f.write(private_pem)
     
     with open(pub_path, "wb") as f:
         f.write(public_pem)
+        
+    print(f"DEBUG: Keys written successfully")
 
     return private_pem, public_pem
 

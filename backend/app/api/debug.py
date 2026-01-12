@@ -34,8 +34,26 @@ def api_reset():
             shutil.rmtree(Config.CLOUD_META)
             Config.CLOUD_META.mkdir()
             
+        # Clear Keys (SRS and Users)
+        if Config.CLOUD_KEYS_SRS.exists():
+            shutil.rmtree(Config.CLOUD_KEYS_SRS)
+            Config.CLOUD_KEYS_SRS.mkdir()
+            
+        if Config.CLOUD_KEYS_USERS.exists():
+            shutil.rmtree(Config.CLOUD_KEYS_USERS)
+            Config.CLOUD_KEYS_USERS.mkdir()
+            
+        # Clear Audit Logs
         if Config.AUDIT_LOG_PATH.exists():
             os.remove(Config.AUDIT_LOG_PATH)
+            
+        # Clear Database
+        if Config.DB_PATH.exists():
+            os.remove(Config.DB_PATH)
+            
+        # Re-initialize Database
+        from app.services.storage.db import init_db
+        init_db()
 
         return api_success({"message": "System reset successfully"})
     except Exception as e:

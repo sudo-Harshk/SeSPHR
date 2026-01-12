@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/table"
 import { importPrivateKey, unwrapKey, decryptFile } from "@/utils/crypto"
 
-const MotionTableRow = motion(TableRow)
+const MotionTableRow = motion.create(TableRow)
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 
@@ -36,6 +36,7 @@ interface AccessResult {
   message: string | null
   key_blob?: string
   iv?: string
+  file_url?: string
 }
 
 export default function DoctorFiles() {
@@ -91,6 +92,26 @@ export default function DoctorFiles() {
     fetchFiles()
   }, [])
 
+  // Auto-restore access for previously unlocked files
+  useEffect(() => {
+    if (files.length === 0 || accessing.size > 0) return
+
+    const restored = sessionStorage.getItem("unlocked_files")
+    if (restored) {
+      try {
+        const filenames: string[] = JSON.parse(restored)
+        // Only trigger if we haven't already checked (to avoid infinite loops or re-checking active ones)
+        filenames.forEach(f => {
+          if (!accessResults.has(f) && files.some(file => file.filename === f)) {
+            handleAccess(f) // Pass flag to indicate this is a restore
+          }
+        })
+      } catch (e) {
+        // Ignore parsing errors
+      }
+    }
+  }, [files]) // Run when files list loads
+
   const handleAccess = async (filename: string) => {
     // Prevent multiple simultaneous access attempts for the same file
     if (accessing.has(filename)) return
@@ -124,8 +145,16 @@ export default function DoctorFiles() {
             status: "granted",
             message: "Access granted successfully",
             key_blob: response.data.data.key_blob,
-            iv: response.data.data.iv
+            iv: response.data.data.iv,
+            file_url: response.data.data.file_url
           })
+
+          // Persist to session storage
+          const currentUnlocked = JSON.parse(sessionStorage.getItem("unlocked_files") || "[]")
+          if (!currentUnlocked.includes(filename)) {
+            sessionStorage.setItem("unlocked_files", JSON.stringify([...currentUnlocked, filename]))
+          }
+
           return newMap
         })
       } else if (status === "denied" || response.data.status === "denied") {
@@ -180,14 +209,18 @@ export default function DoctorFiles() {
 
       // STRICT CONTRACT: Send filename exactly as received.
       // Use query param download=true for file retrieval
-      const response = await api.post(
-        "/doctor/access",
-        { file: filename },
-        {
-          params: { download: "true" },
-          responseType: "blob",
-        }
-      )
+      // Use the file_url provided by access grant, or fallback to construction
+      // The file_url from backend points to the encrypted file download
+      let downloadUrl = accessResult?.file_url || `/doctor/download/${filename}.enc`
+
+      // Axios baseURL is "/api", so if backend returned /api/..., we must strip it to avoid /api/api/...
+      if (downloadUrl.startsWith("/api")) {
+        downloadUrl = downloadUrl.substring(4)
+      }
+
+      const response = await api.get(downloadUrl, {
+        responseType: "blob",
+      })
 
       let finalBlob = response.data instanceof Blob
         ? response.data

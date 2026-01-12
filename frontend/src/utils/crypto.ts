@@ -98,16 +98,17 @@ export async function wrapKey(
 
 export async function importPrivateKey(pem: string): Promise<CryptoKey> {
   // 1. Remove header/footer and spaces
-  const pemHeader = "-----BEGIN PRIVATE KEY-----";
-  const pemFooter = "-----END PRIVATE KEY-----";
+  // Regex to extract the Base64 body between headers
+  // Matches "-----BEGIN ...-----" \n (body) \n "-----END ...-----"
+  const match = pem.match(/-----BEGIN.*?KEY-----([\s\S]*)-----END.*?KEY-----/);
+  let pemContents = "";
 
-  // Simple basic parsing
-  let pemContents = pem;
-  if (pem.includes(pemHeader)) {
-    pemContents = pem.substring(
-      pem.indexOf(pemHeader) + pemHeader.length,
-      pem.indexOf(pemFooter)
-    );
+  if (match && match[1]) {
+    pemContents = match[1];
+  } else {
+    // If no header found, assume it might be raw base64 or try to strip known headers manually
+    // But regex should catch usually.
+    pemContents = pem;
   }
 
   // base64 decode
@@ -122,7 +123,7 @@ export async function importPrivateKey(pem: string): Promise<CryptoKey> {
     binaryDer.buffer,
     {
       name: "RSA-OAEP",
-      hash: "SHA-256", // Must match the hash used during wrapping/encryption
+      hash: "SHA-1", // Changed to SHA-1 for better PyCryptodome compatibility
     },
     true,
     ["decrypt"]

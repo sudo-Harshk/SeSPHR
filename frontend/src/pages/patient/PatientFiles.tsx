@@ -11,7 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 
-const MotionTableRow = motion(TableRow)
+const MotionTableRow = motion.create(TableRow)
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -22,9 +22,6 @@ import { getSRSKey, generateAESKey, encryptFile, wrapKey } from "@/utils/crypto"
 
 interface FileItem {
   filename: string
-  // enc_filename is strictly internal now, but kept if UI needs it for debug.
-  // Backend contract says: { filename, owner, policy }
-  // We keep it optional just in case.
   enc_filename?: string
   policy: string | null
   owner: string | null

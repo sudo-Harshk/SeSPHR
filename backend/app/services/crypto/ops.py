@@ -1,7 +1,7 @@
 import os
 from Crypto.PublicKey import RSA
 from Crypto.Cipher import PKCS1_OAEP
-from Crypto.Hash import SHA256
+from Crypto.Hash import SHA256, SHA1
 from app.services.crypto.keys import get_or_create_srs_key, get_user_public_key
 
 def re_encrypt_key(encrypted_key_hex, doctor_user_id):
@@ -31,7 +31,8 @@ def re_encrypt_key(encrypted_key_hex, doctor_user_id):
     doctor_public_key = RSA.import_key(doctor_pub_pem)
     
     # 4. Encrypt (Wrap) for Doctor
-    cipher_doctor = PKCS1_OAEP.new(doctor_public_key, hashAlgo=SHA256)
+    # Use SHA-1 for compatibility with default WebCrypto importKey/decrypt
+    cipher_doctor = PKCS1_OAEP.new(doctor_public_key, hashAlgo=SHA1)
     wrapped_key = cipher_doctor.encrypt(aes_key)
     
     return wrapped_key.hex()
