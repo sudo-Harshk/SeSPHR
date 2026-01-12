@@ -46,6 +46,7 @@ export default function Sidebar({ role }: SidebarProps) {
             transition={{ duration: 0.3, delay: index * 0.1 }}
           >
             <NavLink
+              end
               to={to}
               className={({ isActive }) =>
                 `flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${isActive

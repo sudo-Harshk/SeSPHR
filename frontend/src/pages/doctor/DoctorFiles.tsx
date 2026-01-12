@@ -208,9 +208,7 @@ export default function DoctorFiles() {
       let downloadUrl = accessResult?.file_url || `/doctor/download/${filename}.enc`
       if (downloadUrl.startsWith("/api")) downloadUrl = downloadUrl.substring(4)
 
-      console.time("1. Network Download")
       const response = await api.get(downloadUrl, { responseType: "blob" })
-      console.timeEnd("1. Network Download")
 
       let finalBlob = response.data instanceof Blob
         ? response.data
@@ -218,14 +216,11 @@ export default function DoctorFiles() {
 
       if (accessResult?.key_blob && accessResult?.iv && doctorPrivateKey) {
         try {
-          console.time("2. Decryption")
           const wrappedKey = accessResult.key_blob
           const iv = accessResult.iv
           const aesKey = await unwrapKey(wrappedKey, doctorPrivateKey)
           finalBlob = await decryptFile(finalBlob, aesKey, iv)
-          console.timeEnd("2. Decryption")
         } catch (cryptoError) {
-          console.timeEnd("2. Decryption") // Ensure we close timer on error
           console.error("Decryption failed:", cryptoError)
           toast.warning("Decryption failed! Using raw file.")
         }
@@ -246,7 +241,6 @@ export default function DoctorFiles() {
 
       return { blob: finalBlob, filename: downloadFilename }
     } catch (err: any) {
-      console.timeEnd("1. Network Download") // Ensure we close timer on error
       console.error("Fetch failed", err)
       throw err
     }
@@ -261,7 +255,7 @@ export default function DoctorFiles() {
       if (!result) return
 
       const url = window.URL.createObjectURL(result.blob)
-      console.time("3. PDF Render")
+
       setPreviewFile({
         isOpen: true,
         fileUrl: url,
