@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { motion, AnimatePresence } from "framer-motion"
 import { LogIn, Loader2, AlertCircle, Eye, EyeOff } from "lucide-react"
 
+
 export default function Login() {
   const { login, authenticated, role: authRole, loading: authLoading } = useAuth()
   const navigate = useNavigate()

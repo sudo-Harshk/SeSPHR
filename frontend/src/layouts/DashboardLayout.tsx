@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { useLocation } from "react-router-dom"
 import Sidebar from "@/components/layout/Sidebar"
 import Topbar from "@/components/layout/Topbar"
+import Footer from "@/components/layout/Footer"
 
 type Role = "patient" | "doctor" | "admin"
 
@@ -35,6 +36,7 @@ export default function DashboardLayout({ role, user, children }: DashboardLayou
             </motion.div>
           </AnimatePresence>
         </main>
+        <Footer />
       </div>
     </div>
   )

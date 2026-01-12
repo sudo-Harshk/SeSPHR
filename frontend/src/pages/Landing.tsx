@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { User, Stethoscope, Cloud, ShieldCheck, Ban } from "lucide-react"
 import { useState } from "react"
 import { PatientDashboardPreview, DoctorDashboardPreview } from "@/components/landing/DashboardPreviews"
+import Footer from "@/components/layout/Footer"
 
 export default function Landing() {
     const [activeTab, setActiveTab] = useState<"patient" | "doctor">("patient")
@@ -179,12 +180,7 @@ export default function Landing() {
                 </motion.div>
             </motion.main>
 
-            <footer className="py-8 bg-white border-t border-slate-100 text-slate-400 text-sm mt-12">
-                <div className="max-w-7xl mx-auto px-6 text-center">
-                    <p className="mb-2 font-medium text-slate-300">&copy; {new Date().getFullYear()} SeSPHR Project.</p>
-                    <p>MTech Final Year Project &bull; Advanced Hybrid Encryption Implementation</p>
-                </div>
-            </footer>
+            <Footer />
         </div>
     )
 }
