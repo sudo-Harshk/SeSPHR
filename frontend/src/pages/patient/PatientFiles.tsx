@@ -22,6 +22,7 @@ import { useAuth } from "@/context/AuthContext"
 import { getSRSKey, generateAESKey, encryptFile, wrapKey } from "@/utils/crypto"
 import FileDetailsDialog from "@/components/FileDetailsDialog"
 import { Skeleton } from "@/components/ui/skeleton"
+import SEO from "@/components/SEO"
 
 interface FileItem {
   filename: string
@@ -270,6 +271,10 @@ export default function PatientFiles() {
   if (loading) {
     return (
       <div className="space-y-4">
+        <SEO
+          title="My Health Records - SeSPHR"
+          description="View and upload your Personal Health Records."
+        />
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -369,6 +374,10 @@ export default function PatientFiles() {
 
   return (
     <div className="space-y-4">
+      <SEO
+        title="My Health Records - SeSPHR"
+        description="View and upload your Personal Health Records."
+      />
       {/* Revoke Confirmation Dialog */}
       <ConfirmDialog
         open={revokeDialog.open}

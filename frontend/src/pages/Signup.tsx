@@ -1,13 +1,13 @@
 import { useState } from "react"
 import { useNavigate, Link } from "react-router-dom"
-import { motion } from "framer-motion"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Loader2, CheckCircle2, AlertCircle, Eye, EyeOff } from "lucide-react"
 import api from "@/services/api"
-import { AnimatePresence } from "framer-motion"
+import { motion, AnimatePresence } from "framer-motion"
 import Footer from "@/components/layout/Footer"
+import SEO from "@/components/SEO"
 
 type Role = "patient" | "doctor" | "admin"
 
@@ -86,6 +86,10 @@ export default function Signup() {
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-900">
+      <SEO
+        title="Sign Up - SeSPHR"
+        description="Create your secure SeSPHR account and manage your health records securely."
+      />
       <div className="flex-1 flex items-center justify-center px-4 py-12">
         <motion.div
           initial={{ opacity: 0, y: 20 }}

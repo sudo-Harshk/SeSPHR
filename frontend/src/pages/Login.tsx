@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { motion, AnimatePresence } from "framer-motion"
 import { LogIn, Loader2, AlertCircle, Eye, EyeOff } from "lucide-react"
+import SEO from "@/components/SEO"
 
 
 export default function Login() {
@@ -51,6 +52,10 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-900 px-4">
+      <SEO
+        title="Login - SeSPHR"
+        description="Login to your SeSPHR secure health record dashboard."
+      />
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}

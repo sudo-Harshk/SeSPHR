@@ -4,6 +4,7 @@ import { User, Stethoscope, Cloud, ShieldCheck, Ban } from "lucide-react"
 import { useState } from "react"
 import { PatientDashboardPreview, DoctorDashboardPreview } from "@/components/landing/DashboardPreviews"
 import Footer from "@/components/layout/Footer"
+import SEO from "@/components/SEO"
 
 export default function Landing() {
     const [activeTab, setActiveTab] = useState<"patient" | "doctor">("patient")
@@ -30,6 +31,11 @@ export default function Landing() {
 
     return (
         <div className="min-h-screen bg-slate-50 text-slate-800 font-sans">
+            <SEO
+                title="SeSPHR - Secure Smart Personal Health Record Platform"
+                description="SeSPHR provides secure, encrypted storage for personal health records with verified doctor access. Your data, your control."
+                keywords="PHR, EHR, Health Records, Secure Health Data, Medical Encryption, Patient Portal"
+            />
             {/* Navbar / Header - Matching Topbar style */}
             <header className="fixed top-0 left-0 right-0 h-14 border-b bg-white flex items-center justify-center z-50 shadow-sm">
                 <div className="w-full max-w-7xl flex justify-between items-center px-6">

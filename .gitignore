@@ -23,23 +23,35 @@
 *.swo
 .DS_Store
 Thumbs.db
+ehthumbs.db
+Desktop.ini
 
-# Root Dependencies
+# Root Dependencies (Global)
 node_modules/
+dist/
+build/
+coverage/
+.npm/
+.yarn/
+
+# Python (Global)
+__pycache__/
+*.py[cod]
+*$py.class
 venv/
 .venv/
 env/
+.env
+.env.*
+.pytest_cache/
+htmlcov/
+site/
 
-# --- Backend Specific ---
-backend/venv/
-backend/.venv/
-backend/__pycache__/
-backend/*.pyc
+# --- Specific Backend Ignores ---
 backend/instance/
-backend/.env
-backend/.pytest_cache/
 backend/benchmark_results.csv
 backend/test_record_v1.txt
+backend/app/services/audit/*.log
 
 # Backend Cloud Storage (Simulation)
 # Allow structure (.gitkeep) but block content
@@ -53,17 +65,11 @@ backend/cloud/meta/*
 backend/cloud/*
 !backend/cloud/.gitkeep
 
-# Backend Services specific ignores
-backend/app/services/storage/*.db
-backend/app/services/audit/*.log
-
-# --- Frontend Specific ---
-frontend/node_modules/
-frontend/dist/
-frontend/build/
-frontend/coverage/
-frontend/.env
-frontend/.env.*
+# --- Specific Frontend Ignores ---
+# (Most are covered by global rules like node_modules, dist, .env)
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
 
 # --- Root Cloud Directory (Legacy/Global) ---
 cloud/keys/*
@@ -80,3 +86,4 @@ logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
+yarn-error.log*
