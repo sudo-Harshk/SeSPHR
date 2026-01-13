@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Loader2, CheckCircle2, AlertCircle, Eye, EyeOff } from "lucide-react"
 import api from "@/services/api"
 import { motion, AnimatePresence } from "framer-motion"
-import Footer from "@/components/layout/Footer"
+
 import SEO from "@/components/SEO"
 
 type Role = "patient" | "doctor" | "admin"
@@ -100,7 +100,9 @@ export default function Signup() {
           <Card className="shadow-2xl border-0">
             <CardHeader className="space-y-3 pb-6">
               <div className="flex items-center justify-center mb-2">
-                <img src="/logo.png" alt="SeSPHR" className="h-14 w-auto object-contain" />
+                <Link to="/">
+                  <img src="/logo.png" alt="SeSPHR" className="h-14 w-auto object-contain cursor-pointer" />
+                </Link>
               </div>
               <CardTitle className="text-2xl font-semibold text-center text-slate-900">
                 Create Account
@@ -301,7 +303,7 @@ export default function Signup() {
           </Card>
         </motion.div>
       </div>
-      <Footer />
+
     </div>
   )
 }

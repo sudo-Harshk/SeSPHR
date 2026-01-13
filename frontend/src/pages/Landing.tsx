@@ -41,7 +41,9 @@ export default function Landing() {
             <header className="fixed top-0 left-0 right-0 h-14 border-b bg-white flex items-center justify-center z-50 shadow-sm">
                 <div className="w-full max-w-7xl flex justify-between items-center px-6">
                     <div className="flex items-center gap-2">
-                        <img src="/logo.png" alt="SeSPHR" className="h-10 w-auto object-contain" />
+                        <Link to="/">
+                            <img src="/logo.png" alt="SeSPHR" className="h-10 w-auto object-contain cursor-pointer" />
+                        </Link>
                     </div>
                     <Link to="/login" className="px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors">
                         Sign In
@@ -63,7 +65,9 @@ export default function Landing() {
                     {/* Left Column: Content */}
                     <div className="flex flex-col items-start text-left order-2 lg:order-1">
                         <div className="mb-6">
-                            <img src="/logo.png" alt="SeSPHR" className="h-24 md:h-32 w-auto object-contain" />
+                            <Link to="/">
+                                <img src="/logo.png" alt="SeSPHR" className="h-24 md:h-32 w-auto object-contain cursor-pointer" />
+                            </Link>
                         </div>
                         <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-slate-900 mb-6 leading-tight tracking-tight">
                             Secure Sharing of <br />

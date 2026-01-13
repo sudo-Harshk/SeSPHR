@@ -70,7 +70,9 @@ export default function Login() {
               transition={{ delay: 0.1, type: "spring", stiffness: 200 }}
               className="flex items-center justify-center mb-4"
             >
-              <img src="/logo.png" alt="SeSPHR" className="h-14 w-auto object-contain" />
+              <Link to="/">
+                <img src="/logo.png" alt="SeSPHR" className="h-14 w-auto object-contain cursor-pointer" />
+              </Link>
             </motion.div>
             <CardTitle className="text-2xl text-center">Login</CardTitle>
             <CardDescription className="text-center">
