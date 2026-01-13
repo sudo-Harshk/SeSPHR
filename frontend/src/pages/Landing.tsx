@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { User, Stethoscope, Cloud, ShieldCheck, Ban } from "lucide-react"
 import { useState } from "react"
 import { PatientDashboardPreview, DoctorDashboardPreview } from "@/components/landing/DashboardPreviews"
+import { ArchitectureDiagram } from "@/components/ArchitectureDiagram"
 import Footer from "@/components/layout/Footer"
 import SEO from "@/components/SEO"
 
@@ -142,8 +143,35 @@ export default function Landing() {
                     </div>
                 </motion.div>
 
+                {/* Architecture Diagram Section */}
+                <motion.div
+                    variants={containerVariants}
+                    initial="hidden"
+                    whileInView="visible"
+                    viewport={{ once: true, margin: "-100px" }}
+                    className="w-full max-w-6xl mt-12 mb-24"
+                >
+                    <div className="text-center mb-16">
+                        <span className="text-xs font-bold text-blue-600 tracking-widest uppercase bg-blue-50 px-3 py-1 rounded-full border border-blue-100">System Architecture</span>
+                        <h3 className="text-3xl font-bold text-slate-900 mt-6">How SeSPHR Works</h3>
+                        <p className="text-xl text-slate-600 mt-4 max-w-3xl mx-auto">
+                            A secure flow from patient key generation to authorized doctor access.
+                        </p>
+                    </div>
+
+                    <div className="flex justify-center w-full">
+                        <ArchitectureDiagram className="w-full max-w-5xl h-auto min-h-[400px]" />
+                    </div>
+                </motion.div>
+
                 {/* Features Section */}
-                <motion.div variants={itemVariants} className="w-full max-w-6xl mt-12">
+                <motion.div
+                    variants={containerVariants}
+                    initial="hidden"
+                    whileInView="visible"
+                    viewport={{ once: true, margin: "-100px" }}
+                    className="w-full max-w-6xl mt-12"
+                >
                     <div className="text-center mb-16">
                         <span className="text-xs font-bold text-blue-600 tracking-widest uppercase bg-blue-50 px-3 py-1 rounded-full border border-blue-100">Security Architecture</span>
                         <h3 className="text-3xl font-bold text-slate-900 mt-6">Why SeSPHR?</h3>
@@ -151,37 +179,49 @@ export default function Landing() {
 
                     <div className="grid md:grid-cols-3 gap-8">
                         {/* Blind Cloud */}
-                        <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-200 hover:border-blue-200 hover:shadow-md transition-all group">
-                            <div className="w-12 h-12 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600 mb-6 group-hover:scale-110 transition-transform duration-300">
-                                <Cloud className="w-6 h-6" />
+                        <motion.div
+                            variants={itemVariants}
+                            whileHover={{ y: -5, transition: { duration: 0.2 } }}
+                            className="bg-white p-8 rounded-xl shadow-lg shadow-slate-200/50 border border-slate-100 hover:border-blue-200 transition-colors group"
+                        >
+                            <div className="w-14 h-14 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600 mb-6 group-hover:scale-110 transition-transform duration-300 shadow-sm shadow-indigo-100">
+                                <Cloud className="w-7 h-7" />
                             </div>
-                            <h4 className="text-lg font-bold text-slate-900 mb-2">Blind Cloud</h4>
-                            <p className="text-slate-600 text-sm leading-relaxed">
+                            <h4 className="text-xl font-bold text-slate-900 mb-3">Blind Cloud</h4>
+                            <p className="text-slate-600 leading-relaxed text-[15px]">
                                 Data is encrypted in your browser before upload. The server <strong>never</strong> sees your raw health data.
                             </p>
-                        </div>
+                        </motion.div>
 
                         {/* Verified Access */}
-                        <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-200 hover:border-emerald-200 hover:shadow-md transition-all group">
-                            <div className="w-12 h-12 bg-emerald-50 rounded-lg flex items-center justify-center text-emerald-600 mb-6 group-hover:scale-110 transition-transform duration-300">
-                                <ShieldCheck className="w-6 h-6" />
+                        <motion.div
+                            variants={itemVariants}
+                            whileHover={{ y: -5, transition: { duration: 0.2 } }}
+                            className="bg-white p-8 rounded-xl shadow-lg shadow-slate-200/50 border border-slate-100 hover:border-emerald-200 transition-colors group"
+                        >
+                            <div className="w-14 h-14 bg-emerald-50 rounded-2xl flex items-center justify-center text-emerald-600 mb-6 group-hover:scale-110 transition-transform duration-300 shadow-sm shadow-emerald-100">
+                                <ShieldCheck className="w-7 h-7" />
                             </div>
-                            <h4 className="text-lg font-bold text-slate-900 mb-2">Verified Access</h4>
-                            <p className="text-slate-600 text-sm leading-relaxed">
+                            <h4 className="text-xl font-bold text-slate-900 mb-3">Verified Access</h4>
+                            <p className="text-slate-600 leading-relaxed text-[15px]">
                                 Only authorized doctors with valid keys and identity checks can decrypt patient records.
                             </p>
-                        </div>
+                        </motion.div>
 
                         {/* Instant Revocation */}
-                        <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-200 hover:border-rose-200 hover:shadow-md transition-all group">
-                            <div className="w-12 h-12 bg-rose-50 rounded-lg flex items-center justify-center text-rose-600 mb-6 group-hover:scale-110 transition-transform duration-300">
-                                <Ban className="w-6 h-6" />
+                        <motion.div
+                            variants={itemVariants}
+                            whileHover={{ y: -5, transition: { duration: 0.2 } }}
+                            className="bg-white p-8 rounded-xl shadow-lg shadow-slate-200/50 border border-slate-100 hover:border-rose-200 transition-colors group"
+                        >
+                            <div className="w-14 h-14 bg-rose-50 rounded-2xl flex items-center justify-center text-rose-600 mb-6 group-hover:scale-110 transition-transform duration-300 shadow-sm shadow-rose-100">
+                                <Ban className="w-7 h-7" />
                             </div>
-                            <h4 className="text-lg font-bold text-slate-900 mb-2">Instant Revocation</h4>
-                            <p className="text-slate-600 text-sm leading-relaxed">
+                            <h4 className="text-xl font-bold text-slate-900 mb-3">Instant Revocation</h4>
+                            <p className="text-slate-600 leading-relaxed text-[15px]">
                                 Revoke access anytime. Past keys become useless immediately, ensuring your data stays yours.
                             </p>
-                        </div>
+                        </motion.div>
                     </div>
                 </motion.div>
             </motion.main>
