@@ -40,7 +40,10 @@ def api_files():
                         "filename": original_filename,
                         "enc_filename": enc_filename,
                         "owner": meta.get("owner", "Unknown"),
-                        "policy": meta.get("policy", "N/A")
+                        "policy": meta.get("policy", "N/A"),
+                        "iv": meta.get("iv", "N/A"),
+                        "key_blob": meta.get("key_blob", "N/A"),
+                        "algorithm": "AES-GCM-256 + RSA-OAEP"
                     })
                 except (json.JSONDecodeError, IOError):
                     continue

@@ -44,7 +44,10 @@ def api_files():
                 files.append({
                     "filename": original_filename.replace(".enc", "").replace(".json", ""),
                     "owner": owner,
-                    "policy": meta.get("policy", None)
+                    "policy": meta.get("policy", None),
+                    "iv": meta.get("iv", "N/A"),
+                    "key_blob": meta.get("key_blob", "N/A"),
+                    "algorithm": "AES-GCM-256 + RSA-OAEP"
                 })
             except (json.JSONDecodeError, IOError):
                 continue
@@ -70,7 +73,10 @@ def api_upload():
         "message": "File uploaded successfully",
         "filename": file.filename.replace(".enc", "").replace(".json", ""),
         "policy": policy,
-        "owner": session["user_id"]
+        "owner": session["user_id"],
+        "iv": iv,
+        "key_blob": key_blob,
+        "algorithm": "AES-GCM-256 + RSA-OAEP"
     })
 
 @bp.route("/revoke", methods=["POST"])
