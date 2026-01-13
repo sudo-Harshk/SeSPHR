@@ -7,7 +7,7 @@ class Config:
     BASE_DIR = Path(__file__).parent
     
     # Storage Paths
-    CLOUD_DIR = BASE_DIR / "cloud"
+    CLOUD_DIR = BASE_DIR.parent / "cloud"
     CLOUD_DATA = CLOUD_DIR / "data"
     CLOUD_META = CLOUD_DIR / "meta"
     CLOUD_KEYS_SRS = CLOUD_DIR / "keys" / "srs"
