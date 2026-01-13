@@ -36,10 +36,17 @@ def api_files():
                     
                     original_filename = enc_filename.replace(".enc", "")
                     
+                    # Get modification time and size
+                    file_path = Config.CLOUD_DATA / enc_filename
+                    mtime = os.path.getmtime(file_path)
+                    size = os.path.getsize(file_path)
+                    
                     files.append({
                         "filename": original_filename,
                         "enc_filename": enc_filename,
                         "owner": meta.get("owner", "Unknown"),
+                        "date": mtime,
+                        "size": size,
                         "policy": meta.get("policy", "N/A"),
                         "iv": meta.get("iv", "N/A"),
                         "key_blob": meta.get("key_blob", "N/A"),
@@ -49,9 +56,15 @@ def api_files():
                     continue
             else:
                 original_filename = enc_filename.replace(".enc", "")
+                file_path = Config.CLOUD_DATA / enc_filename
+                mtime = os.path.getmtime(file_path)
+                size = os.path.getsize(file_path)
+                
                 files.append({
                     "filename": original_filename,
                     "owner": None,
+                    "date": mtime,
+                    "size": size,
                     "policy": None
                 })
 

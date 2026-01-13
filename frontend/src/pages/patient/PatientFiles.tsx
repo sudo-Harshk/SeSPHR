@@ -21,6 +21,7 @@ import ConfirmDialog from "@/components/ConfirmDialog"
 import { useAuth } from "@/context/AuthContext"
 import { getSRSKey, generateAESKey, encryptFile, wrapKey } from "@/utils/crypto"
 import FileDetailsDialog from "@/components/FileDetailsDialog"
+import { Skeleton } from "@/components/ui/skeleton"
 
 interface FileItem {
   filename: string
@@ -29,6 +30,8 @@ interface FileItem {
   owner: string | null
   iv?: string
   key_blob?: string
+  date?: number
+  size?: number
   algorithm?: string
 }
 
@@ -59,6 +62,18 @@ interface RevokeResponse {
     status: string
   } | null
   error?: string
+}
+
+const formatBytes = (bytes: number, decimals = 2) => {
+  if (!+bytes) return '0 Bytes'
+
+  const k = 1024
+  const dm = decimals < 0 ? 0 : decimals
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB']
+
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`
 }
 
 export default function PatientFiles() {
@@ -99,6 +114,8 @@ export default function PatientFiles() {
           filename: file.filename,
           enc_filename: file.enc_filename,
           owner: file.owner || null,
+          date: file.date,
+          size: file.size,
           policy: file.policy || null,
           iv: file.iv || "N/A",
           key_blob: file.key_blob || "N/A",
@@ -252,11 +269,89 @@ export default function PatientFiles() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
-          <p className="text-slate-600">Loading files...</p>
-        </div>
+      <div className="space-y-4">
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+        >
+          <h1 className="text-2xl font-bold text-slate-900">My Health Records</h1>
+          <p className="text-slate-600 mt-1">
+            View and upload your Personal Health Records
+          </p>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1, duration: 0.4 }}
+        >
+          <Card>
+            <CardHeader>
+              <CardTitle>Upload Health Record</CardTitle>
+              <CardDescription>
+                Upload a file and specify an access policy
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Skeleton className="h-4 w-[100px]" />
+                  <Skeleton className="h-10 w-full" />
+                </div>
+                <div className="space-y-2">
+                  <Skeleton className="h-[80px] w-full" />
+                </div>
+                <Skeleton className="h-10 w-[120px]" />
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Files</CardTitle>
+            <CardDescription>
+              <Skeleton className="h-4 w-[100px]" />
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>File Name</TableHead>
+                  <TableHead>Policy</TableHead>
+                  <TableHead>Owner</TableHead>
+                  <TableHead className="text-right w-[220px]">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {[...Array(5)].map((_, i) => (
+                  <TableRow key={i}>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-2">
+                        <Skeleton className="h-4 w-4 rounded-full" />
+                        <Skeleton className="h-4 w-[200px]" />
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-6 w-[80px] rounded-md" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-4 w-[100px]" />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <Skeleton className="h-8 w-8 rounded-full" />
+                        <Skeleton className="h-8 w-[100px]" />
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
       </div>
     )
   }
@@ -417,10 +512,12 @@ export default function PatientFiles() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>File Name</TableHead>
-                      <TableHead>Policy</TableHead>
-                      <TableHead>Owner</TableHead>
-                      <TableHead className="text-right w-[220px]">Actions</TableHead>
+                      <TableHead className="w-auto">File Name</TableHead>
+                      <TableHead className="w-[120px]">Date</TableHead>
+                      <TableHead className="w-[150px]">Policy</TableHead>
+                      <TableHead className="w-[100px]">Owner</TableHead>
+                      <TableHead className="w-[100px]">Size</TableHead>
+                      <TableHead className="w-[180px]">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -441,6 +538,13 @@ export default function PatientFiles() {
                               {cleanFilename}
                             </div>
                           </TableCell>
+                          <TableCell className="text-sm text-slate-500">
+                            {file.date ? new Date(file.date * 1000).toLocaleDateString("en-US", {
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric'
+                            }) : "—"}
+                          </TableCell>
                           <TableCell>
                             <motion.span
                               key={file.policy}
@@ -448,18 +552,21 @@ export default function PatientFiles() {
                               animate={{ scale: 1, opacity: 1 }}
                               transition={{ duration: 0.3, type: "spring", stiffness: 300 }}
                               className={`px-2 py-1 rounded-md text-xs font-medium ${isRevoked
-                                ? "bg-red-100 text-red-800 border border-red-200"
-                                : "bg-blue-100 text-blue-800 border border-blue-200"
+                                ? "bg-red-50 text-red-700 border border-red-200"
+                                : "bg-blue-50 text-blue-700 border border-blue-200"
                                 }`}
                             >
-                              {file.policy || "N/A"}
+                              {isRevoked ? "Revoked" : (file.policy?.includes("Doctor") ? "Doctor" : file.policy || "N/A")}
                             </motion.span>
                           </TableCell>
                           <TableCell className="text-slate-600">
                             {file.owner === userId ? "You" : (file.owner || "Unknown")}
                           </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-2">
+                          <TableCell className="text-sm text-slate-500">
+                            {file.size ? formatBytes(file.size) : "—"}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -473,7 +580,7 @@ export default function PatientFiles() {
                                 size="sm"
                                 onClick={() => handleRevokeClick(file.filename)}
                                 disabled={revoking || revokeDialog.filename === file.filename || !!isRevoked}
-                                className={`gap-2 ${isRevoked ? "opacity-50 cursor-not-allowed" : ""}`}
+                                className={`gap-2 h-8 px-3 ${isRevoked ? "opacity-50 cursor-not-allowed" : ""}`}
                               >
                                 {revoking && revokeDialog.filename === file.filename ? (
                                   <>

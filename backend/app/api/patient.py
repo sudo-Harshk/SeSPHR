@@ -41,9 +41,19 @@ def api_files():
                 if not owner and "test_patient" in meta_filename:
                      owner = "test_patient_mod2"
 
+                # Get modification time and size
+                file_path = Config.CLOUD_DATA / meta.get("file", meta_filename.replace(".json", ".enc"))
+                mtime = 0
+                size = 0
+                if file_path.exists():
+                     mtime = os.path.getmtime(file_path)
+                     size = os.path.getsize(file_path)
+
                 files.append({
                     "filename": original_filename.replace(".enc", "").replace(".json", ""),
                     "owner": owner,
+                    "date": mtime,
+                    "size": size,
                     "policy": meta.get("policy", None),
                     "iv": meta.get("iv", "N/A"),
                     "key_blob": meta.get("key_blob", "N/A"),

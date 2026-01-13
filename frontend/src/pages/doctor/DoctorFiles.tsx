@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { FileText, Loader2, Shield, Eye, Download, XCircle, Info } from "lucide-react"
+import { FileText, Loader2, Shield, Eye, Download, Info } from "lucide-react"
 import FilePreviewModal from "@/components/FilePreviewModal"
 import { motion } from "framer-motion"
 import api from "@/services/api"
@@ -16,12 +16,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 import FileDetailsDialog from "@/components/FileDetailsDialog"
+import { Skeleton } from "@/components/ui/skeleton"
 
 const MotionTableRow = motion.create(TableRow)
 
 interface FileItem {
   filename: string
   owner: string | null
+  date?: number // timestamp
+  size?: number // bytes
   policy: string | null
   iv?: string
   key_blob?: string
@@ -44,6 +47,18 @@ interface AccessResult {
   file_url?: string
 }
 
+const formatBytes = (bytes: number, decimals = 2) => {
+  if (!+bytes) return '0 Bytes'
+
+  const k = 1024
+  const dm = decimals < 0 ? 0 : decimals
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB']
+
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`
+}
+
 export default function DoctorFiles() {
   const [files, setFiles] = useState<FileItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -51,7 +66,6 @@ export default function DoctorFiles() {
 
   // Concurrent state management using Sets
   const [accessing, setAccessing] = useState<Set<string>>(new Set())
-  const [restoring, setRestoring] = useState<Set<string>>(new Set())
   const [downloading, setDownloading] = useState<Set<string>>(new Set())
   const [accessResults, setAccessResults] = useState<Map<string, AccessResult>>(new Map())
   const [doctorPrivateKey, setDoctorPrivateKey] = useState<CryptoKey | null>(null)
@@ -122,7 +136,7 @@ export default function DoctorFiles() {
         const filenames: string[] = JSON.parse(restored)
         filenames.forEach(f => {
           if (!accessResults.has(f) && files.some(file => file.filename === f)) {
-            handleAccess(f, true)
+            requestAccess(f, true)
           }
         })
       } catch (e) {
@@ -131,37 +145,29 @@ export default function DoctorFiles() {
     }
   }, [files])
 
-  const handleAccess = async (filename: string, isRestore = false) => {
-    if (accessing.has(filename) || restoring.has(filename)) return
+  const requestAccess = async (filename: string, isRestore = false): Promise<AccessResult | null> => {
+    if (accessing.has(filename)) return null // Already in progress
 
     try {
-      if (isRestore) {
-        setRestoring((prev) => { const next = new Set(prev); next.add(filename); return next; })
-      } else {
+      if (!isRestore) {
         setAccessing((prev) => { const next = new Set(prev); next.add(filename); return next; })
       }
-
-      setAccessResults((prev) => {
-        const newMap = new Map(prev)
-        // Reset or clear previous entry if needed, but 'granted' state is what matters
-        if (!isRestore) newMap.delete(filename)
-        return newMap
-      })
 
       const response = await api.post("/doctor/access", { file: filename })
       const status = response.data.data?.status
 
       if (response.data.success && status === "granted") {
+        const result: AccessResult = {
+          filename,
+          status: "granted",
+          key_blob: response.data.data.key_blob,
+          iv: response.data.data.iv,
+          file_url: response.data.data.file_url
+        }
+
         setAccessResults((prev) => {
           const newMap = new Map(prev)
-          newMap.set(filename, {
-            filename,
-            status: "granted",
-            key_blob: response.data.data.key_blob,
-            iv: response.data.data.iv,
-            file_url: response.data.data.file_url
-          })
-
+          newMap.set(filename, result)
           const currentUnlocked = JSON.parse(sessionStorage.getItem("unlocked_files") || "[]")
           if (!currentUnlocked.includes(filename)) {
             sessionStorage.setItem("unlocked_files", JSON.stringify([...currentUnlocked, filename]))
@@ -169,46 +175,45 @@ export default function DoctorFiles() {
           return newMap
         })
 
-        if (!isRestore) {
-          toast.success(`Access GRANTED for ${filename}`)
-        }
+        return result
 
-      } else if (status === "denied" || response.data.status === "denied") {
+      } else {
         const reason = response.data.reason || "Access denied"
+        const result: AccessResult = { filename, status: "denied" }
         setAccessResults((prev) => {
           const newMap = new Map(prev)
-          newMap.set(filename, { filename, status: "denied" })
+          newMap.set(filename, result)
           return newMap
         })
-
-        if (!isRestore) {
-          toast.error(`Access DENIED: ${reason}`)
-        }
-      } else {
-        throw new Error(response.data.error || "Unknown response")
+        if (!isRestore) toast.error(`Access DENIED: ${reason}`)
+        return result
       }
     } catch (err: any) {
       const message = getFriendlyErrorMessage(err)
+      const result: AccessResult = { filename, status: "denied" }
       setAccessResults((prev) => {
         const newMap = new Map(prev)
-        newMap.set(filename, { filename, status: "denied" })
+        newMap.set(filename, result)
         return newMap
       })
-
-      if (!isRestore) {
-        toast.error(`Access DENIED: ${message}`)
-      }
+      if (!isRestore) toast.error(`Access DENIED: ${message}`)
+      return result
     } finally {
-      if (isRestore) {
-        setRestoring((prev) => { const next = new Set(prev); next.delete(filename); return next; })
-      } else {
+      if (!isRestore) {
         setAccessing((prev) => { const next = new Set(prev); next.delete(filename); return next; })
       }
     }
   }
 
   const fetchAndDecryptFile = async (filename: string): Promise<{ blob: Blob, filename: string } | null> => {
-    const accessResult = accessResults.get(filename)
+    // 1. Check if we have access result
+    let accessResult = accessResults.get(filename)
+
+    // 2. If not granted or missing, try to request access immediately
+    if (accessResult?.status !== "granted") {
+      accessResult = await requestAccess(filename) || undefined
+    }
+
     if (accessResult?.status !== "granted") return null
 
     try {
@@ -241,7 +246,7 @@ export default function DoctorFiles() {
       }
       if (downloadFilename.endsWith(".enc")) downloadFilename = downloadFilename.replace(".enc", "")
 
-      // Force valid MIME type for PDFs so the browser can render it
+      // Force valid MIME type for PDFs
       if (downloadFilename.toLowerCase().endsWith(".pdf")) {
         finalBlob = new Blob([finalBlob], { type: "application/pdf" })
       }
@@ -254,7 +259,7 @@ export default function DoctorFiles() {
   }
 
   const handleView = async (filename: string) => {
-    if (downloading.has(filename)) return
+    if (downloading.has(filename) || accessing.has(filename)) return
 
     try {
       setDownloading((prev) => { const next = new Set(prev); next.add(filename); return next; })
@@ -279,7 +284,7 @@ export default function DoctorFiles() {
   }
 
   const handleDownload = async (filename: string) => {
-    if (downloading.has(filename)) return
+    if (downloading.has(filename) || accessing.has(filename)) return
 
     try {
       setDownloading((prev) => { const next = new Set(prev); next.add(filename); return next; })
@@ -320,13 +325,73 @@ export default function DoctorFiles() {
     return backendMsg || defaultMsg
   }
 
+  // Helper to normalize policy
+  const getPolicyState = (policy: string | null) => {
+    if (!policy) return "Denied" // default safety
+    const p = policy.toLowerCase()
+    if (p.includes("doctor")) return "Doctor"
+    if (p.includes("revoked")) return "Revoked"
+    return "Denied" // catch-all for unknown/denied
+  }
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
-          <p className="text-slate-600">Loading accessible files...</p>
+      <div className="space-y-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Accessible Health Records</h1>
+          <p className="text-slate-600 mt-1">View Personal Health Records you have access to</p>
         </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>Files</CardTitle>
+            <CardDescription><Skeleton className="h-4 w-[100px]" /></CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table className="w-full">
+              <TableHeader>
+                <TableRow className="h-[68px]">
+                  <TableHead className="w-[1%] max-w-[400px] whitespace-nowrap px-4">File Name</TableHead>
+                  <TableHead className="w-[120px] px-4">Date</TableHead>
+                  <TableHead className="w-[150px] px-4">Owner</TableHead>
+                  <TableHead className="w-[120px] px-4">Policy</TableHead>
+                  <TableHead className="w-auto whitespace-nowrap px-4 text-right">Size</TableHead>
+                  <TableHead className="w-auto whitespace-nowrap px-4 text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {[...Array(5)].map((_, i) => (
+                  <TableRow key={i} className="h-[68px]">
+                    <TableCell className="px-4 py-0">
+                      <div className="flex items-center gap-1.5">
+                        <Skeleton className="h-4 w-4 rounded-full" />
+                        <Skeleton className="h-4 w-[200px]" />
+                      </div>
+                    </TableCell>
+                    <TableCell className="px-4 py-0">
+                      <Skeleton className="h-4 w-[80px]" />
+                    </TableCell>
+                    <TableCell className="px-4 py-0">
+                      <Skeleton className="h-4 w-[100px]" />
+                    </TableCell>
+                    <TableCell className="px-4 py-0">
+                      <Skeleton className="h-6 w-[80px] rounded-md" />
+                    </TableCell>
+                    <TableCell className="px-4 py-0">
+                      <Skeleton className="h-4 w-[60px]" />
+                    </TableCell>
+                    <TableCell className="px-4 py-0 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <Skeleton className="h-8 w-8 rounded-full" />
+                        <Skeleton className="h-8 w-[80px]" />
+                        <Skeleton className="h-8 w-8 rounded-full" />
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
       </div>
     )
   }
@@ -399,24 +464,61 @@ export default function DoctorFiles() {
             <CardDescription>{files.length} {files.length === 1 ? "file" : "files"} accessible</CardDescription>
           </CardHeader>
           <CardContent>
-            <Table>
+            <Table className="w-full">
               <TableHeader>
-                <TableRow>
-                  <TableHead>File Name</TableHead>
-                  <TableHead>Owner</TableHead>
-                  <TableHead>Policy</TableHead>
-                  <TableHead className="text-right w-[220px]">Actions</TableHead>
+                <TableRow className="h-[68px]">
+                  <TableHead className="w-auto px-4">File Name</TableHead>
+                  <TableHead className="w-[120px] px-4">Date</TableHead>
+                  <TableHead className="w-[150px] px-4">Owner</TableHead>
+                  <TableHead className="w-[120px] px-4">Policy</TableHead>
+                  <TableHead className="w-[100px] px-4">Size</TableHead>
+                  <TableHead className="w-[160px] whitespace-nowrap px-4 text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {files.map((file, index) => {
-                  const isRevoked = file.policy?.toUpperCase().includes("REVOKED")
+                  const policyState = getPolicyState(file.policy)
+                  const isDoctor = policyState === "Doctor"
+                  const isRevokedOrDenied = policyState === "Revoked" || policyState === "Denied"
+
                   const isAccessing = accessing.has(file.filename)
-                  const isRestoring = restoring.has(file.filename)
                   const isDownloading = downloading.has(file.filename)
-                  const accessResult = accessResults.get(file.filename)
-                  const isGranted = accessResult?.status === "granted"
-                  const isDenied = accessResult?.status === "denied"
+
+                  // Row Styles
+                  // Active: Normal
+                  // Revoked/Denied: Dimmed (muted colors)
+                  const rowClass = `h-[68px] transition-colors ${isRevokedOrDenied ? "bg-slate-50/50 cursor-not-allowed" : "hover:bg-slate-50/50"
+                    }`
+
+                  // Text Styles
+                  // Active: Primary text
+                  // Revoked/Denied: Muted text
+                  const nameClass = isRevokedOrDenied ? "text-slate-500" : "text-slate-900"
+                  const ownerClass = isRevokedOrDenied ? "text-slate-400" : "text-slate-500"
+
+                  // Policy Pill Styles
+                  let pillClass = ""
+                  let pillText = ""
+
+                  if (policyState === "Doctor") {
+                    pillClass = "bg-green-50 text-green-700 border-green-200"
+                    pillText = "Doctor"
+                  } else if (policyState === "Revoked") {
+                    pillClass = "bg-slate-100 text-slate-500 border-slate-200"
+                    pillText = "Revoked"
+                  } else {
+                    pillClass = "bg-red-50 text-red-600 border-red-200"
+                    pillText = "Denied"
+                  }
+
+                  // Action Logic
+                  // Policy = Doctor: Info (enabled), View (enabled, primary), Download (enabled, secondary)
+                  // Policy = Revoked/Denied: Info (enabled), View (disabled), Download (disabled)
+
+                  const canView = isDoctor
+                  const canDownload = isDoctor
+
+                  const isGlobalLoading = isAccessing || isDownloading
 
                   return (
                     <MotionTableRow
@@ -424,117 +526,92 @@ export default function DoctorFiles() {
                       initial={{ opacity: 0, x: -20 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: index * 0.05, duration: 0.3 }}
-                      className={isRevoked ? "bg-slate-50 opacity-75" : ""}
+                      className={rowClass}
                     >
-                      <TableCell className="font-medium">
-                        <div className="flex items-center gap-2">
-                          <FileText className={`w-4 h-4 ${isRevoked ? "text-slate-300" : "text-slate-400"}`} />
-                          <span className={isRevoked ? "text-slate-500 line-through" : ""}>{file.filename}</span>
+                      <TableCell className="px-4 py-0 font-medium h-[68px]">
+                        <div className="h-full flex items-center gap-1.5">
+                          <FileText className={`w-4 h-4 shrink-0 ${isRevokedOrDenied ? "text-slate-400" : "text-slate-500"}`} />
+                          <div className="max-w-[400px]">
+                            <span className={`block truncate font-semibold ${nameClass}`}>{file.filename}</span>
+                          </div>
                         </div>
                       </TableCell>
-                      <TableCell className="text-slate-600">{file.owner || "Unknown"}</TableCell>
-                      <TableCell>
-                        {file.policy && file.policy !== "N/A" ? (
+                      <TableCell className="px-4 py-0 h-[68px]">
+                        <div className={`h-full flex items-center truncate text-xs ${ownerClass}`}>
+                          {file.date ? (
+                            new Date(file.date * 1000).toLocaleDateString("en-US", {
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric'
+                            })
+                          ) : "—"}
+                        </div>
+                      </TableCell>
+                      <TableCell className="px-4 py-0 h-[68px]">
+                        <div className={`h-full flex items-center truncate text-xs ${ownerClass}`}>
+                          <span className="truncate max-w-[150px]">{file.owner || "Unknown"}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="px-4 py-0 h-[68px]">
+                        <div className="h-full flex items-center">
                           <motion.span
                             key={`${file.filename}-policy`}
                             initial={{ scale: 0.9, opacity: 0 }}
                             animate={{ scale: 1, opacity: 1 }}
                             transition={{ duration: 0.2 }}
-                            className={`px-2 py-1 rounded-md text-xs font-medium ${isRevoked
-                              ? "bg-red-100 text-red-800 border border-red-200"
-                              : "bg-green-100 text-green-800"
-                              }`}
+                            className={`h-6 box-border border flex items-center justify-center text-xs font-medium leading-none px-2 rounded-md ${pillClass}`}
                           >
-                            {file.policy}
+                            {pillText}
                           </motion.span>
-                        ) : (
-                          <span className="text-slate-400 text-sm">—</span>
-                        )}
+                        </div>
                       </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
+                      <TableCell className="px-4 py-0 h-[68px]">
+                        <div className={`h-full flex items-center truncate text-xs ${ownerClass}`}>
+                          {file.size ? formatBytes(file.size) : "—"}
+                        </div>
+                      </TableCell>
+                      <TableCell className="px-4 py-0 text-right h-[68px]">
+                        <div className="h-full flex items-center justify-end gap-2">
+                          {/* Info: Disabled if Revoked/Denied */}
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => setSelectedFileDetails(file)}
-                            className="h-8 w-8 p-0"
+                            className={`h-8 w-8 p-0 ${isRevokedOrDenied ? "opacity-30" : ""}`}
+                            disabled={!!isRevokedOrDenied}
                           >
                             <Info className="w-4 h-4 text-slate-400" />
                           </Button>
-                          <motion.div
-                            key={`${file.filename}-${accessResult?.status || "none"}`}
-                            initial={false}
-                            animate={{ scale: 1, opacity: 1 }}
-                            transition={{ duration: 0.3 }}
+
+                          {/* View: Primary */}
+                          <Button
+                            variant="default"
+                            size="sm"
+                            onClick={() => handleView(file.filename)}
+                            disabled={!canView || isGlobalLoading || !doctorPrivateKey}
+                            className={`h-8 px-3 gap-2 shadow-sm whitespace-nowrap ${!canView
+                              ? "bg-slate-100 text-slate-400 border border-slate-200" // Disabled look
+                              : "bg-slate-900 text-white hover:bg-slate-800"
+                              }`}
                           >
-                            {isGranted ? (
-                              <div className="flex gap-2">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleView(file.filename)}
-                                  disabled={isDownloading}
-                                  className="gap-2 bg-green-50 text-green-700 border-green-200 hover:bg-green-100 hover:text-green-800"
-                                >
-                                  {isDownloading ? (
-                                    <>
-                                      <Loader2 className="w-3 h-3 animate-spin" />
-                                      Loading...
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Eye className="w-3 h-3" />
-                                      View
-                                    </>
-                                  )}
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleDownload(file.filename)}
-                                  disabled={isDownloading}
-                                  className="gap-2"
-                                >
-                                  <Download className="w-3 h-3" />
-                                </Button>
-                              </div>
+                            {isAccessing || isDownloading ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
                             ) : (
-                              <Button
-                                variant={isRevoked ? "ghost" : isDenied ? "destructive" : "outline"}
-                                size="sm"
-                                onClick={() => handleAccess(file.filename)}
-                                disabled={isAccessing || isRestoring || !!isRevoked}
-                                className="gap-2"
-                              >
-                                {isRestoring ? (
-                                  <>
-                                    <Loader2 className="w-3 h-3 animate-spin" />
-                                    Re-verifying...
-                                  </>
-                                ) : isAccessing ? (
-                                  <>
-                                    <Loader2 className="w-3 h-3 animate-spin" />
-                                    Checking...
-                                  </>
-                                ) : isDenied ? (
-                                  <>
-                                    <XCircle className="w-3 h-3" />
-                                    Denied
-                                  </>
-                                ) : isRevoked ? (
-                                  <>
-                                    <XCircle className="w-3 h-3" />
-                                    Revoked
-                                  </>
-                                ) : (
-                                  <>
-                                    <Shield className="w-3 h-3" />
-                                    Access
-                                  </>
-                                )}
-                              </Button>
+                              <Eye className="w-3 h-3" />
                             )}
-                          </motion.div>
+                            View
+                          </Button>
+
+                          {/* Download: Secondary */}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDownload(file.filename)}
+                            disabled={!canDownload || isGlobalLoading}
+                            className={`h-8 w-8 p-0 ${!canDownload ? "opacity-50" : ""}`}
+                          >
+                            <Download className="w-3 h-3" />
+                          </Button>
                         </div>
                       </TableCell>
                     </MotionTableRow>
