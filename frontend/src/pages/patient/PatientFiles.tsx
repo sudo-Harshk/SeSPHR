@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { FileText, Loader2, Upload, CheckCircle2, ShieldX } from "lucide-react"
+import { FileText, Loader2, Upload, Info, ShieldX } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import api from "@/services/api"
 import {
@@ -15,16 +15,21 @@ const MotionTableRow = motion.create(TableRow)
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { toast } from "sonner"
 
 import ConfirmDialog from "@/components/ConfirmDialog"
 import { useAuth } from "@/context/AuthContext"
 import { getSRSKey, generateAESKey, encryptFile, wrapKey } from "@/utils/crypto"
+import FileDetailsDialog from "@/components/FileDetailsDialog"
 
 interface FileItem {
   filename: string
   enc_filename?: string
   policy: string | null
   owner: string | null
+  iv?: string
+  key_blob?: string
+  algorithm?: string
 }
 
 interface ApiResponse {
@@ -40,6 +45,9 @@ interface UploadResponse {
   data: {
     filename: string
     policy: string
+    iv?: string
+    key_blob?: string
+    algorithm?: string
   } | null
   status?: string // Legacy support
   error?: string
@@ -63,8 +71,6 @@ export default function PatientFiles() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
 
   const [uploading, setUploading] = useState(false)
-  const [uploadError, setUploadError] = useState<string | null>(null)
-  const [uploadSuccess, setUploadSuccess] = useState(false)
 
   // Revoke state
   const [revokeDialog, setRevokeDialog] = useState<{
@@ -72,9 +78,10 @@ export default function PatientFiles() {
     filename: string | null
   }>({ open: false, filename: null })
   const [revoking, setRevoking] = useState(false)
-  const [revokeError, setRevokeError] = useState<string | null>(null)
-  const [revokeSuccess, setRevokeSuccess] = useState(false)
   const [revokeUserId, setRevokeUserId] = useState("")
+
+  // Details Dialog State
+  const [selectedFileDetails, setSelectedFileDetails] = useState<FileItem | null>(null)
 
   const normalizeFilename = (name: string) => {
     return name.replace(/\.enc$/, "").replace(/\.json$/, "")
@@ -93,6 +100,9 @@ export default function PatientFiles() {
           enc_filename: file.enc_filename,
           owner: file.owner || null,
           policy: file.policy || null,
+          iv: file.iv || "N/A",
+          key_blob: file.key_blob || "N/A",
+          algorithm: file.algorithm || "AES-GCM-256 + RSA-OAEP",
         }))
         setFiles(fileList)
       } else {
@@ -113,15 +123,11 @@ export default function PatientFiles() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       setSelectedFile(e.target.files[0])
-      setUploadError(null)
-      setUploadSuccess(false)
     }
   }
 
   const handleRevokeClick = (filename: string) => {
     setRevokeDialog({ open: true, filename })
-    setRevokeError(null)
-    setRevokeSuccess(false)
     setRevokeUserId("")
   }
 
@@ -130,8 +136,6 @@ export default function PatientFiles() {
 
     try {
       setRevoking(true)
-      setRevokeError(null)
-      setRevokeSuccess(false)
 
       const payload: any = { filename: revokeDialog.filename }
       if (revokeUserId.trim()) {
@@ -144,7 +148,7 @@ export default function PatientFiles() {
       const status = response.data.data?.status
 
       if (response.data.success || status === "revoked") {
-        setRevokeSuccess(true)
+        toast.success("Access revoked successfully!")
         setRevokeDialog({ open: false, filename: null })
 
         // Optimistic Update: Mark as revoked only if FULL revocation
@@ -155,16 +159,11 @@ export default function PatientFiles() {
               : f
           ))
         }
-
-        // Reset success message after delay
-        setTimeout(() => {
-          setRevokeSuccess(false)
-        }, 3000)
       } else {
-        setRevokeError(response.data.error || "Failed to revoke access")
+        toast.error(response.data.error || "Failed to revoke access")
       }
     } catch (err: any) {
-      setRevokeError(
+      toast.error(
         err.response?.data?.error ||
         err.response?.data?.message ||
         "Failed to revoke access"
@@ -176,21 +175,18 @@ export default function PatientFiles() {
 
   const handleRevokeCancel = () => {
     setRevokeDialog({ open: false, filename: null })
-    setRevokeError(null)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (!selectedFile) {
-      setUploadError("Please select a file")
+      toast.error("Please select a file to upload")
       return
     }
 
     try {
       setUploading(true)
-      setUploadError(null)
-      setUploadSuccess(false)
 
       // 1. Fetch SRS Public Key
       const srsKey = await getSRSKey()
@@ -221,13 +217,16 @@ export default function PatientFiles() {
 
       // Safe Optimistic Update: Wait for backend response data
       if (response.data.success && response.data.data) {
-        setUploadSuccess(true)
+        toast.success("File uploaded successfully!")
 
         // Add new file to list using BACKEND returned data
         const newFile: FileItem = {
           filename: response.data.data.filename, // Use normalized name from backend
           policy: response.data.data.policy,     // Use canonical policy from backend
           owner: userId || "You",                // We know we are the owner
+          iv: response.data.data.iv || "N/A",
+          key_blob: response.data.data.key_blob || "N/A",
+          algorithm: response.data.data.algorithm || "AES-GCM-256 + RSA-OAEP",
         }
 
         setFiles(prev => [newFile, ...prev])
@@ -237,15 +236,11 @@ export default function PatientFiles() {
         const fileInput = document.getElementById("file-input") as HTMLInputElement
         if (fileInput) fileInput.value = ""
 
-        // Reset success message after delay
-        setTimeout(() => {
-          setUploadSuccess(false)
-        }, 3000)
       } else {
-        setUploadError(response.data.error || "Upload failed")
+        toast.error(response.data.error || "Upload failed")
       }
     } catch (err: any) {
-      setUploadError(
+      toast.error(
         err.response?.data?.error ||
         err.response?.data?.message ||
         "Failed to upload file"
@@ -279,37 +274,6 @@ export default function PatientFiles() {
 
   return (
     <div className="space-y-4">
-      {/* Revoke Success Message */}
-      <AnimatePresence>
-        {revokeSuccess && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.3 }}
-            className="p-3 bg-green-50 border border-green-200 rounded-md flex items-center gap-2"
-          >
-            <CheckCircle2 className="w-4 h-4 text-green-600" />
-            <p className="text-sm text-green-600">Access revoked successfully!</p>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Revoke Error Message */}
-      <AnimatePresence>
-        {revokeError && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.3 }}
-            className="p-3 bg-red-50 border border-red-200 rounded-md"
-          >
-            <p className="text-sm text-red-600">{revokeError}</p>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Revoke Confirmation Dialog */}
       <ConfirmDialog
         open={revokeDialog.open}
@@ -394,35 +358,6 @@ export default function PatientFiles() {
                 </div>
               </div>
 
-              <AnimatePresence>
-                {uploadError && (
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.95 }}
-                    transition={{ duration: 0.2 }}
-                    className="p-3 bg-red-50 border border-red-200 rounded-md"
-                  >
-                    <p className="text-sm text-red-600">{uploadError}</p>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              <AnimatePresence>
-                {uploadSuccess && (
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.95 }}
-                    transition={{ duration: 0.2 }}
-                    className="p-3 bg-green-50 border border-green-200 rounded-md flex items-center gap-2"
-                  >
-                    <CheckCircle2 className="w-4 h-4 text-green-600" />
-                    <p className="text-sm text-green-600">File uploaded successfully!</p>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
               <Button type="submit" disabled={uploading || !selectedFile}>
                 {uploading ? (
                   <>
@@ -485,7 +420,7 @@ export default function PatientFiles() {
                       <TableHead>File Name</TableHead>
                       <TableHead>Policy</TableHead>
                       <TableHead>Owner</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
+                      <TableHead className="text-right w-[220px]">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -524,25 +459,35 @@ export default function PatientFiles() {
                             {file.owner === userId ? "You" : (file.owner || "Unknown")}
                           </TableCell>
                           <TableCell className="text-right">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleRevokeClick(file.filename)}
-                              disabled={revoking || revokeDialog.filename === file.filename || !!isRevoked}
-                              className={`gap-2 ${isRevoked ? "opacity-50 cursor-not-allowed" : ""}`}
-                            >
-                              {revoking && revokeDialog.filename === file.filename ? (
-                                <>
-                                  <Loader2 className="w-3 h-3 animate-spin" />
-                                  Revoking...
-                                </>
-                              ) : (
-                                <>
-                                  <ShieldX className="w-3 h-3" />
-                                  {isRevoked ? "Revoked" : "Revoke Access"}
-                                </>
-                              )}
-                            </Button>
+                            <div className="flex items-center justify-end gap-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setSelectedFileDetails(file)}
+                                className="h-8 w-8 p-0"
+                              >
+                                <Info className="w-4 h-4 text-slate-400" />
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleRevokeClick(file.filename)}
+                                disabled={revoking || revokeDialog.filename === file.filename || !!isRevoked}
+                                className={`gap-2 ${isRevoked ? "opacity-50 cursor-not-allowed" : ""}`}
+                              >
+                                {revoking && revokeDialog.filename === file.filename ? (
+                                  <>
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                    Revoking...
+                                  </>
+                                ) : (
+                                  <>
+                                    <ShieldX className="w-3 h-3" />
+                                    {isRevoked ? "Revoked" : "Revoke Access"}
+                                  </>
+                                )}
+                              </Button>
+                            </div>
                           </TableCell>
                         </MotionTableRow>
                       )
@@ -554,6 +499,12 @@ export default function PatientFiles() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <FileDetailsDialog
+        open={!!selectedFileDetails}
+        onOpenChange={(open) => !open && setSelectedFileDetails(null)}
+        file={selectedFileDetails}
+      />
     </div>
   )
 }

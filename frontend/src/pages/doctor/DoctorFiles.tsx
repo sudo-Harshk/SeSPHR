@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { FileText, Loader2, Shield, Eye, Download, XCircle } from "lucide-react"
+import { FileText, Loader2, Shield, Eye, Download, XCircle, Info } from "lucide-react"
 import FilePreviewModal from "@/components/FilePreviewModal"
 import { motion } from "framer-motion"
 import api from "@/services/api"
@@ -15,6 +15,7 @@ import { importPrivateKey, unwrapKey, decryptFile } from "@/utils/crypto"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
+import FileDetailsDialog from "@/components/FileDetailsDialog"
 
 const MotionTableRow = motion.create(TableRow)
 
@@ -22,6 +23,9 @@ interface FileItem {
   filename: string
   owner: string | null
   policy: string | null
+  iv?: string
+  key_blob?: string
+  algorithm?: string
 }
 
 interface ApiResponse {
@@ -64,6 +68,9 @@ export default function DoctorFiles() {
     filename: "",
     mimeType: "",
   })
+
+  // Details Dialog State
+  const [selectedFileDetails, setSelectedFileDetails] = useState<FileItem | null>(null)
 
   // 1. Fetch Doctor's Private Key on Mount
   useEffect(() => {
@@ -398,7 +405,7 @@ export default function DoctorFiles() {
                   <TableHead>File Name</TableHead>
                   <TableHead>Owner</TableHead>
                   <TableHead>Policy</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead className="text-right w-[220px]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -446,6 +453,14 @@ export default function DoctorFiles() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setSelectedFileDetails(file)}
+                            className="h-8 w-8 p-0"
+                          >
+                            <Info className="w-4 h-4 text-slate-400" />
+                          </Button>
                           <motion.div
                             key={`${file.filename}-${accessResult?.status || "none"}`}
                             initial={false}
@@ -540,6 +555,12 @@ export default function DoctorFiles() {
         fileUrl={previewFile.fileUrl}
         filename={previewFile.filename}
         mimeType={previewFile.mimeType}
+      />
+
+      <FileDetailsDialog
+        open={!!selectedFileDetails}
+        onOpenChange={(open) => !open && setSelectedFileDetails(null)}
+        file={selectedFileDetails}
       />
     </div>
   )
