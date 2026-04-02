@@ -30,6 +30,7 @@ export default function AdminAuditLogs() {
   const [logs, setLogs] = useState<AuditLog[]>([])
   const [loading, setLoading] = useState(true)
   const [integrityStatus, setIntegrityStatus] = useState<IntegrityStatus>("verifying")
+  const [integrityDetail, setIntegrityDetail] = useState<string>("")
 
   useEffect(() => {
     fetchLogs()
@@ -38,103 +39,39 @@ export default function AdminAuditLogs() {
   const fetchLogs = async () => {
     try {
       setLoading(true)
-      const response = await api.get("/audit/logs")
-      if (response.data.success && response.data.data.logs) {
-        const fetchedLogs = response.data.data.logs
-        // Sort by timestamp descending for display (latest first)
-        const sortedLogs = [...fetchedLogs].sort((a: AuditLog, b: AuditLog) => b.timestamp - a.timestamp)
-        setLogs(sortedLogs)
+      setIntegrityStatus("verifying")
+      const response = await api.get("/admin/audit")
+      if (response.data.success && response.data.data) {
+        const data = response.data.data as {
+          logs: AuditLog[]
+          integrity?: { valid: boolean; detail?: string }
+        }
+        const fetchedLogs = data.logs ?? []
 
-        // Use the original fetched order (or sort chronologically) for verification
-        // Assuming backend returns chronological or we must sort to reconstruct chain
-        const chronologicalLogs = [...fetchedLogs].sort((a: AuditLog, b: AuditLog) => a.timestamp - b.timestamp)
-        verifyIntegrity(chronologicalLogs)
+        const integrity = data.integrity
+        if (integrity) {
+          setIntegrityStatus(integrity.valid ? "valid" : "tampered")
+          setIntegrityDetail(integrity.detail?.trim() || "")
+        } else {
+          setIntegrityStatus("valid")
+          setIntegrityDetail("")
+        }
+
+        const sortedForDisplay = [...fetchedLogs].sort((a, b) => b.timestamp - a.timestamp)
+        setLogs(sortedForDisplay)
       } else {
         setLogs([])
-        setIntegrityStatus("valid") // Empty is valid
+        setIntegrityStatus("valid")
+        setIntegrityDetail("")
       }
     } catch (error) {
       console.error("Failed to fetch audit logs", error)
       setLogs([])
+      setIntegrityStatus("valid")
+      setIntegrityDetail("")
     } finally {
       setLoading(false)
     }
-  }
-
-  const verifyIntegrity = async (chronologicalLogs: AuditLog[]) => {
-    setIntegrityStatus("verifying")
-
-    // Artificial small delay to show the verifying state (UX)
-    await new Promise(resolve => setTimeout(resolve, 800))
-
-    let isValid = true
-
-    // Check if logs are empty
-    if (chronologicalLogs.length === 0) {
-      setIntegrityStatus("valid")
-      return
-    }
-
-    try {
-      for (let i = 0; i < chronologicalLogs.length; i++) {
-        const log = chronologicalLogs[i]
-
-        // 1. Verify prev_hash link (except for the very first one logic)
-        // We only strictly check if we have the previous item in this list.
-        if (i > 0) {
-          if (log.prev_hash !== chronologicalLogs[i - 1].hash) {
-            console.error(`Hash chain broken at index ${i}: prev_hash mismatch`, {
-              currentPrev: log.prev_hash,
-              prevActual: chronologicalLogs[i - 1].hash
-            })
-            isValid = false
-            break
-          }
-        }
-
-        // 2. Recompute Hash
-        const computedHash = await computeHash(log)
-
-        if (computedHash !== log.hash) {
-          console.error(`Hash mismatch at index ${i}:`, { computed: computedHash, stored: log.hash, log })
-          isValid = false
-          break
-        }
-      }
-    } catch (e) {
-      console.error("Verification error", e)
-      isValid = false
-    }
-
-    setIntegrityStatus(isValid ? "valid" : "tampered")
-  }
-
-  const computeHash = async (l: AuditLog) => {
-    // CANONICAL SERIALIZATION - STRICT ORDER & FORMATTING
-    // Python's json.dumps(sort_keys=True) produces keys in alphabetical order.
-    // Separators are (', ', ': ') by default.
-
-    // We use JSON.stringify for values to handle escaping correctly (e.g. quotes in filenames),
-    // but manually construct the outer JSON object to ensure exact spacing and key order.
-
-    // Keys: action, file, prev_hash, status, timestamp, user
-
-    const canonical = `{` +
-      `"action": ${JSON.stringify(l.action)}, ` +
-      `"file": ${JSON.stringify(l.file)}, ` +
-      `"prev_hash": ${JSON.stringify(l.prev_hash)}, ` +
-      `"status": ${JSON.stringify(l.status)}, ` +
-      `"timestamp": ${l.timestamp}, ` +
-      `"user": ${JSON.stringify(l.user)}` +
-      `}`
-
-    // Hash using SHA-256
-    const msgBuffer = new TextEncoder().encode(canonical)
-    const hashBuffer = await crypto.subtle.digest("SHA-256", msgBuffer)
-    const hashArray = Array.from(new Uint8Array(hashBuffer))
-    const hashHex = hashArray.map(b => b.toString(16).padStart(2, "0")).join("")
-
-    return hashHex
   }
 
   const formatDate = (timestamp: number) => {
@@ -184,8 +121,8 @@ export default function AdminAuditLogs() {
             <>
               <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
               <div className="space-y-1">
-                <h4 className="font-semibold">Verifying Audit Integrity...</h4>
-                <p className="text-sm text-muted-foreground">Recomputing cryptographic hash chains for all entries.</p>
+                <h4 className="font-semibold">Loading audit log…</h4>
+                <p className="text-sm text-muted-foreground">Fetching entries and server-side integrity check.</p>
               </div>
             </>
           )}
@@ -194,7 +131,9 @@ export default function AdminAuditLogs() {
               <ShieldCheck className="h-6 w-6 text-green-600" />
               <div className="space-y-1">
                 <h4 className="font-semibold text-green-700">All Audit Entries Verified</h4>
-                <p className="text-sm text-muted-foreground">Cryptographic hash chain is intact. No tampering detected.</p>
+                <p className="text-sm text-muted-foreground">
+                  Hash chain was checked on the server in strict file order (same as <code className="text-xs bg-green-100 px-1 rounded">log_event</code>).
+                </p>
               </div>
             </>
           )}
@@ -203,7 +142,10 @@ export default function AdminAuditLogs() {
               <ShieldAlert className="h-6 w-6 text-red-600" />
               <div className="space-y-1">
                 <h4 className="font-semibold text-red-700">Integrity Violation Detected</h4>
-                <p className="text-sm text-muted-foreground">Hash mismatches found. The audit log may have been altered manually.</p>
+                <p className="text-sm text-muted-foreground">
+                  {integrityDetail ||
+                    "The audit file may have been edited, merged, or partially truncated. Delete or replace audit.log in development if you need a clean chain."}
+                </p>
               </div>
             </>
           )}

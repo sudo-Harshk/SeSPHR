@@ -8,6 +8,7 @@ interface AuthContextType {
   authenticated: boolean
   userId: string | null
   role: Role
+  attributes: Record<string, string>
   login: (email: string, password: string) => Promise<void>
   logout: () => Promise<void>
   loading: boolean
@@ -23,23 +24,25 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [authenticated, setAuthenticated] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
   const [role, setRole] = useState<Role>(null)
+  const [attributes, setAttributes] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     api
       .get("/session")
       .then(res => {
-        // Handle new API response format: { success, data: { authenticated, user_id, role, ... }, error }
-        // Note: Backend returns 'user_id', checking if we need to map high-level or deep
+        // Handle new API response format: { success, data: { authenticated, user_id, role, attributes, ... }, error }
         const data = res.data.data
         if (res.data.success && data?.user_id) {
           setAuthenticated(true)
           setUserId(data.user_id)
           setRole(data.role)
+          setAttributes(data.attributes || {})
         } else {
           setAuthenticated(false)
           setUserId(null)
           setRole(null)
+          setAttributes({})
         }
       })
       .catch((error) => {
@@ -48,6 +51,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           setAuthenticated(false)
           setUserId(null)
           setRole(null)
+          setAttributes({})
         }
       })
       .finally(() => setLoading(false))
@@ -60,8 +64,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
     // Response contract: { success: true, data: { user: <uuid>, role: <role> } }
     if (response.data.success && response.data.data) {
       setAuthenticated(true)
-      setUserId(response.data.data.user) // Backend currently returns 'user' in login response for UUID
+      setUserId(response.data.data.user)
       setRole(response.data.data.role)
+      
+      // Fetch session to get attributes after login
+      try {
+        const sessionRes = await api.get("/session")
+        if (sessionRes.data.success && sessionRes.data.data?.attributes) {
+          setAttributes(sessionRes.data.data.attributes)
+        }
+      } catch (e) {
+        console.error("Failed to fetch attributes after login", e)
+      }
     } else {
       throw new Error(response.data.error || "Login failed")
     }
@@ -72,10 +86,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setAuthenticated(false)
     setUserId(null)
     setRole(null)
+    setAttributes({})
   }
 
   return (
-    <AuthContext.Provider value={{ authenticated, userId, role, login, logout, loading }}>
+    <AuthContext.Provider value={{ authenticated, userId, role, attributes, login, logout, loading }}>
       {children}
     </AuthContext.Provider>
   )

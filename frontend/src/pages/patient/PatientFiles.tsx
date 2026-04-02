@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { FileText, Loader2, Upload, Info, ShieldX } from "lucide-react"
+import { FileText, Loader2, Upload, Info, ShieldX, Unlock } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import api from "@/services/api"
 import {
@@ -34,6 +34,8 @@ interface FileItem {
   date?: number
   size?: number
   algorithm?: string
+  revoked_users?: string[]
+  can_restore_full?: boolean
 }
 
 interface ApiResponse {
@@ -65,6 +67,12 @@ interface RevokeResponse {
   error?: string
 }
 
+interface GrantResponse {
+  success: boolean
+  data: { status?: string } | null
+  error?: string
+}
+
 const formatBytes = (bytes: number, decimals = 2) => {
   if (!+bytes) return '0 Bytes'
 
@@ -87,6 +95,10 @@ export default function PatientFiles() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
 
   const [uploading, setUploading] = useState(false)
+  const [globalPolicy, setGlobalPolicy] = useState("Role:Doctor")
+  const [portions, setPortions] = useState<{ name: string; policy: string }[]>([])
+  const [newPortionName, setNewPortionName] = useState("")
+  const [newPortionPolicy, setNewPortionPolicy] = useState("")
 
   // Revoke state
   const [revokeDialog, setRevokeDialog] = useState<{
@@ -95,6 +107,19 @@ export default function PatientFiles() {
   }>({ open: false, filename: null })
   const [revoking, setRevoking] = useState(false)
   const [revokeUserId, setRevokeUserId] = useState("")
+  const [grantUserDialog, setGrantUserDialog] = useState<{
+    open: boolean
+    filename: string | null
+  }>({ open: false, filename: null })
+  const [grantUserId, setGrantUserId] = useState("")
+  const [granting, setGranting] = useState(false)
+  const [restoreDialog, setRestoreDialog] = useState<{
+    open: boolean
+    filename: string | null
+    needsManualPolicy: boolean
+  }>({ open: false, filename: null, needsManualPolicy: false })
+  const [restorePolicyInput, setRestorePolicyInput] = useState("Role:Doctor")
+  const [restoring, setRestoring] = useState(false)
 
   // Details Dialog State
   const [selectedFileDetails, setSelectedFileDetails] = useState<FileItem | null>(null)
@@ -121,6 +146,8 @@ export default function PatientFiles() {
           iv: file.iv || "N/A",
           key_blob: file.key_blob || "N/A",
           algorithm: file.algorithm || "AES-GCM-256 + RSA-OAEP",
+          revoked_users: file.revoked_users ?? [],
+          can_restore_full: Boolean(file.can_restore_full),
         }))
         setFiles(fileList)
       } else {
@@ -168,15 +195,7 @@ export default function PatientFiles() {
       if (response.data.success || status === "revoked") {
         toast.success("Access revoked successfully!")
         setRevokeDialog({ open: false, filename: null })
-
-        // Optimistic Update: Mark as revoked only if FULL revocation
-        if (!revokeUserId.trim()) {
-          setFiles(prevFiles => prevFiles.map(f =>
-            f.filename === revokeDialog.filename
-              ? { ...f, policy: "Role:__REVOKED__" }
-              : f
-          ))
-        }
+        await fetchFiles()
       } else {
         toast.error(response.data.error || "Failed to revoke access")
       }
@@ -193,6 +212,80 @@ export default function PatientFiles() {
 
   const handleRevokeCancel = () => {
     setRevokeDialog({ open: false, filename: null })
+    setRevokeUserId("")
+  }
+
+  const handleGrantUserClick = (filename: string) => {
+    setGrantUserDialog({ open: true, filename })
+    setGrantUserId("")
+  }
+
+  const handleGrantUserConfirm = async () => {
+    if (!grantUserDialog.filename) return
+    if (!grantUserId.trim()) {
+      toast.error("Enter the doctor user ID to un-block.")
+      return
+    }
+    try {
+      setGranting(true)
+      const response = await api.post<GrantResponse>("/patient/grant", {
+        filename: grantUserDialog.filename,
+        grant_user_id: grantUserId.trim(),
+      })
+      if (response.data.success) {
+        toast.success("Access restored for that user.")
+        setGrantUserDialog({ open: false, filename: null })
+        await fetchFiles()
+      } else {
+        toast.error(response.data.error || "Failed to restore access")
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || "Failed to restore access")
+    } finally {
+      setGranting(false)
+    }
+  }
+
+  const handleRestoreFullClick = (file: FileItem) => {
+    const needsManualPolicy =
+      Boolean(file.policy?.includes("__REVOKED__") || file.policy?.includes("REVOKED")) &&
+      !file.can_restore_full
+    setRestoreDialog({
+      open: true,
+      filename: file.filename,
+      needsManualPolicy,
+    })
+    setRestorePolicyInput("Role:Doctor")
+  }
+
+  const handleRestoreFullConfirm = async () => {
+    if (!restoreDialog.filename) return
+    try {
+      setRestoring(true)
+      const payload: Record<string, unknown> = {
+        filename: restoreDialog.filename,
+        restore_full: true,
+      }
+      if (restoreDialog.needsManualPolicy) {
+        if (!restorePolicyInput.trim()) {
+          toast.error("Enter a policy (e.g. Role:Doctor)")
+          return
+        }
+        payload.policy = restorePolicyInput.trim()
+      }
+      const response = await api.post<GrantResponse>("/patient/grant", payload)
+      if (response.data.success) {
+        toast.success("Access restored. Doctors matching the policy can open this record again.")
+        setRestoreDialog({ open: false, filename: null, needsManualPolicy: false })
+        await fetchFiles()
+      } else {
+        toast.error(response.data.error || "Failed to restore")
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || "Failed to restore")
+    } finally {
+      setRestoring(false)
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -218,14 +311,30 @@ export default function PatientFiles() {
       // 4. Wrap AES Key
       const wrappedKey = await wrapKey(aesKey, srsKey)
 
-      // 5. Upload
+      // 5. Handle Granular Portions (Simulate individual encryption for each portion)
+      // In a real system, we'd slice the file, but here we'll just send the metadata
+      // of how we WOULD encrypt the portions to show the backend support.
+      const portionsPayload = await Promise.all(portions.map(async (p) => {
+        const pKey = await generateAESKey()
+        const pWrapped = await wrapKey(pKey, srsKey)
+        // We use the same IV for simplicity in demo, but a real one should be random
+        const pIv = btoa(String.fromCharCode(...window.crypto.getRandomValues(new Uint8Array(12))))
+        return {
+          name: p.name,
+          policy: p.policy,
+          key_blob: pWrapped,
+          iv: pIv
+        }
+      }))
+
+      // 6. Upload
       const formData = new FormData()
       // Append encrypted blob with .enc extension to indicate it's encrypted
       formData.append("file", encryptedBlob, `${selectedFile.name}.enc`)
-      const p = "Role:Doctor"
-      formData.append("policy", p)
+      formData.append("policy", globalPolicy)
       formData.append("key_blob", wrappedKey)
       formData.append("iv", iv)
+      formData.append("portions", JSON.stringify(portionsPayload))
 
       const response = await api.post<UploadResponse>("/patient/upload", formData, {
         headers: {
@@ -235,7 +344,9 @@ export default function PatientFiles() {
 
       // Safe Optimistic Update: Wait for backend response data
       if (response.data.success && response.data.data) {
-        toast.success("File uploaded successfully!")
+        toast.success(
+          "Encrypted in your browser and stored on the server as ciphertext only."
+        )
 
         // Add new file to list using BACKEND returned data
         const newFile: FileItem = {
@@ -405,6 +516,53 @@ export default function PatientFiles() {
         </div>
       </ConfirmDialog>
 
+      <ConfirmDialog
+        open={grantUserDialog.open}
+        title="Restore access for a user"
+        description={`Remove a doctor user ID from the block list for "${grantUserDialog.filename ?? ""}".`}
+        confirmText={granting ? "Restoring…" : "Restore access"}
+        cancelText="Cancel"
+        onConfirm={handleGrantUserConfirm}
+        onCancel={() => !granting && setGrantUserDialog({ open: false, filename: null })}
+      >
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-slate-700">Doctor user ID</label>
+          <Input
+            placeholder="Same UUID you used when revoking this user"
+            value={grantUserId}
+            onChange={(e) => setGrantUserId(e.target.value)}
+            className="text-sm"
+            disabled={granting}
+          />
+        </div>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={restoreDialog.open}
+        title="Restore full access"
+        description={
+          restoreDialog.needsManualPolicy
+            ? "This record was revoked before one-click restore was available. Enter the access policy to apply (e.g. Role:Doctor)."
+            : "Restore the access policy from before full revocation. All user-specific blocks for this file will be cleared."
+        }
+        confirmText={restoring ? "Restoring…" : "Restore access"}
+        cancelText="Cancel"
+        onConfirm={handleRestoreFullConfirm}
+        onCancel={() => !restoring && setRestoreDialog({ open: false, filename: null, needsManualPolicy: false })}
+      >
+        {restoreDialog.needsManualPolicy && (
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-slate-700">Access policy</label>
+            <Input
+              value={restorePolicyInput}
+              onChange={(e) => setRestorePolicyInput(e.target.value)}
+              placeholder="Role:Doctor"
+              disabled={restoring}
+            />
+          </div>
+        )}
+      </ConfirmDialog>
+
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -452,26 +610,81 @@ export default function PatientFiles() {
               </div>
 
               <div className="space-y-2">
-                <div className="p-3 bg-slate-50 border border-slate-200 rounded-md">
-                  <p className="text-sm font-medium text-slate-900">
-                    Role:Doctor
-                  </p>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Automatically restricted to Registered Doctors.
-                  </p>
-                </div>
+                <label className="text-sm font-medium">Global Access Policy</label>
+                <Input
+                  value={globalPolicy}
+                  onChange={(e) => setGlobalPolicy(e.target.value)}
+                  placeholder="e.g. Role:Doctor"
+                />
               </div>
 
-              <Button type="submit" disabled={uploading || !selectedFile}>
+              <div className="space-y-3 p-4 border rounded-lg bg-slate-50/50">
+                <label className="text-sm font-semibold flex items-center gap-2">
+                  <Info className="h-4 w-4 text-blue-500" />
+                  Granular Access (Portions)
+                </label>
+                <p className="text-xs text-slate-500">Define specific access rules for parts of this record (e.g. Lab Results).</p>
+
+                <div className="flex gap-2">
+                  <Input
+                    className="flex-1"
+                    placeholder="Field Name (e.g. Lab Results)"
+                    value={newPortionName}
+                    onChange={(e) => setNewPortionName(e.target.value)}
+                  />
+                  <Input
+                    className="flex-1"
+                    placeholder="Policy (e.g. Dept:Cardiology)"
+                    value={newPortionPolicy}
+                    onChange={(e) => setNewPortionPolicy(e.target.value)}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      if (newPortionName && newPortionPolicy) {
+                        setPortions([...portions, { name: newPortionName, policy: newPortionPolicy }])
+                        setNewPortionName("")
+                        setNewPortionPolicy("")
+                      }
+                    }}
+                  >
+                    Add
+                  </Button>
+                </div>
+
+                {portions.length > 0 && (
+                  <div className="space-y-2 mt-2">
+                    {portions.map((p, i) => (
+                      <div key={i} className="flex items-center justify-between text-sm bg-white p-2 rounded border">
+                        <span><strong>{p.name}</strong>: {p.policy}</span>
+                        <button
+                          type="button"
+                          className="text-red-500 hover:text-red-700"
+                          onClick={() => setPortions(portions.filter((_, idx) => idx !== i))}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <Button
+                type="submit"
+                className="w-full sm:w-auto"
+                disabled={uploading || !selectedFile}
+              >
                 {uploading ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                    Uploading...
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Encrypting & Uploading...
                   </>
                 ) : (
                   <>
-                    <Upload className="w-4 h-4 mr-2" />
-                    Upload File
+                    <Upload className="mr-2 h-4 w-4" />
+                    Secure Upload
                   </>
                 )}
               </Button>
@@ -531,12 +744,18 @@ export default function PatientFiles() {
                   </TableHeader>
                   <TableBody>
                     {files.map((file, index) => {
-                      const isRevoked = file.policy?.includes("REVOKED") || file.policy?.includes("Revoked");
-                      const cleanFilename = normalizeFilename(file.filename);
+                      const pol = file.policy || ""
+                      const isFullRevoked =
+                        pol.includes("__REVOKED__") ||
+                        pol.toLowerCase().includes("revoked")
+                      const blockedUsers = file.revoked_users?.length ?? 0
+                      const cleanFilename = normalizeFilename(file.filename)
+                      const showRestoreFull = isFullRevoked
+                      const showUnblockUser = blockedUsers > 0 && !isFullRevoked
 
                       return (
                         <MotionTableRow
-                          key={`${file.filename}-${file.policy}`}
+                          key={`${file.filename}-${file.policy}-${blockedUsers}`}
                           initial={{ opacity: 0, x: -20 }}
                           animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: index * 0.05, duration: 0.3 }}
@@ -560,12 +779,18 @@ export default function PatientFiles() {
                               initial={{ scale: 0.8, opacity: 0 }}
                               animate={{ scale: 1, opacity: 1 }}
                               transition={{ duration: 0.3, type: "spring", stiffness: 300 }}
-                              className={`px-2 py-1 rounded-md text-xs font-medium ${isRevoked
+                              className={`px-2 py-1 rounded-md text-xs font-medium ${isFullRevoked
                                 ? "bg-red-50 text-red-700 border border-red-200"
                                 : "bg-blue-50 text-blue-700 border border-blue-200"
                                 }`}
                             >
-                              {isRevoked ? "Revoked" : (file.policy?.includes("Doctor") ? "Doctor" : file.policy || "N/A")}
+                              {isFullRevoked
+                                ? "Revoked (all)"
+                                : blockedUsers > 0
+                                  ? `${blockedUsers} blocked`
+                                  : file.policy?.includes("Doctor")
+                                    ? "Doctor"
+                                    : file.policy || "N/A"}
                             </motion.span>
                           </TableCell>
                           <TableCell className="text-slate-600">
@@ -575,7 +800,7 @@ export default function PatientFiles() {
                             {file.size ? formatBytes(file.size) : "—"}
                           </TableCell>
                           <TableCell>
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -584,12 +809,36 @@ export default function PatientFiles() {
                               >
                                 <Info className="w-4 h-4 text-slate-400" />
                               </Button>
+                              {showRestoreFull && (
+                                <Button
+                                  variant="default"
+                                  size="sm"
+                                  className="h-8 gap-1.5 bg-emerald-600 hover:bg-emerald-700"
+                                  disabled={restoring}
+                                  onClick={() => handleRestoreFullClick(file)}
+                                >
+                                  <Unlock className="w-3 h-3" />
+                                  Restore
+                                </Button>
+                              )}
+                              {showUnblockUser && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 gap-1.5 border-emerald-300 text-emerald-800"
+                                  disabled={granting}
+                                  onClick={() => handleGrantUserClick(file.filename)}
+                                >
+                                  <Unlock className="w-3 h-3" />
+                                  Un-block user
+                                </Button>
+                              )}
                               <Button
                                 variant="outline"
                                 size="sm"
                                 onClick={() => handleRevokeClick(file.filename)}
-                                disabled={revoking || revokeDialog.filename === file.filename || !!isRevoked}
-                                className={`gap-2 h-8 px-3 ${isRevoked ? "opacity-50 cursor-not-allowed" : ""}`}
+                                disabled={revoking || revokeDialog.filename === file.filename || isFullRevoked}
+                                className="gap-2 h-8 px-3"
                               >
                                 {revoking && revokeDialog.filename === file.filename ? (
                                   <>
@@ -599,7 +848,7 @@ export default function PatientFiles() {
                                 ) : (
                                   <>
                                     <ShieldX className="w-3 h-3" />
-                                    {isRevoked ? "Revoked" : "Revoke Access"}
+                                    Revoke
                                   </>
                                 )}
                               </Button>

@@ -18,7 +18,7 @@ const roleColors: Record<"patient" | "doctor" | "admin", string> = {
 }
 
 export default function Topbar({ user }: TopbarProps) {
-  const { logout, role } = useAuth()
+  const { logout, role, attributes } = useAuth()
   const navigate = useNavigate()
   const [showLogoutDialog, setShowLogoutDialog] = useState(false)
 
@@ -30,6 +30,9 @@ export default function Topbar({ user }: TopbarProps) {
   const roleLabel = role 
     ? role.charAt(0).toUpperCase() + role.slice(1)
     : ""
+
+  // Filter out the 'Role' attribute since it's already shown as a badge
+  const displayAttributes = Object.entries(attributes || {}).filter(([key]) => key !== "Role")
 
   return (
     <motion.div 
@@ -49,6 +52,17 @@ export default function Topbar({ user }: TopbarProps) {
           >
             {roleLabel}
           </Badge>
+        )}
+        
+        {/* Attributes display */}
+        {displayAttributes.length > 0 && (
+          <div className="flex items-center gap-1 ml-2 border-l pl-3">
+            {displayAttributes.map(([key, value]) => (
+              <Badge key={key} variant="secondary" className="text-[10px] font-normal py-0">
+                {key}: {value}
+              </Badge>
+            ))}
+          </div>
         )}
       </div>
 

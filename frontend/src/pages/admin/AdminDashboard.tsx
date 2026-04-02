@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react"
-import { Shield, FileSearch, CheckCircle2, XCircle, Loader2, ArrowRight, AlertTriangle, Users } from "lucide-react"
+import { Shield, FileSearch, CheckCircle2, XCircle, Loader2, ArrowRight, AlertTriangle, Users, Trash2 } from "lucide-react"
 import { motion } from "framer-motion"
 import { useNavigate } from "react-router-dom"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import api from "@/services/api"
+import ConfirmDialog from "@/components/ConfirmDialog"
+import { toast } from "sonner"
 
 interface AuditLogEntry {
   timestamp: number
@@ -31,11 +33,39 @@ export default function AdminDashboard() {
   const [grantedCount, setGrantedCount] = useState(0)
   const [deniedCount, setDeniedCount] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [clearUploadsOpen, setClearUploadsOpen] = useState(false)
+  const [clearingUploads, setClearingUploads] = useState(false)
+
+  const handleClearUploads = async () => {
+    if (clearingUploads) return
+    setClearingUploads(true)
+    try {
+      const response = await api.post("/debug/clear-uploads")
+      if (response.data.success) {
+        const d = response.data.data
+        toast.success(
+          `PHR storage cleared (${d?.removed_enc_files ?? 0} files, ${d?.removed_meta_files ?? 0} metadata). Users and keys unchanged.`
+        )
+        setClearUploadsOpen(false)
+      } else {
+        toast.error(response.data.error || "Clear failed")
+      }
+    } catch (err: any) {
+      const msg = err.response?.data?.error || err.message || "Request failed"
+      toast.error(
+        msg.includes("Debug") || err.response?.status === 403
+          ? "Available only in development (FLASK_ENV=development)."
+          : msg
+      )
+    } finally {
+      setClearingUploads(false)
+    }
+  }
 
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const response = await api.get<ApiResponse>("/audit/logs")
+        const response = await api.get<ApiResponse>("/admin/audit")
         if (response.data.success && response.data.data?.logs) {
           const logs = response.data.data.logs
           setLogCount(logs.length)
@@ -274,10 +304,40 @@ export default function AdminDashboard() {
                   </Button>
                 </div>
               </div>
+
+              <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-100 rounded-lg">
+                <Trash2 className="w-5 h-5 text-amber-700 mt-0.5 shrink-0" />
+                <div className="flex-1">
+                  <p className="font-medium text-slate-900">Demo: clear PHR uploads</p>
+                  <p className="text-sm text-slate-600 mb-3">
+                    Removes all ciphertext and metadata from cloud storage so you can run a fresh upload → doctor view flow. Does not delete users, the database, SRS keys, or user RSA keys.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="gap-2 border-amber-300 text-amber-900 hover:bg-amber-100"
+                    onClick={() => setClearUploadsOpen(true)}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Clear uploads only
+                  </Button>
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>
       </motion.div>
+
+      <ConfirmDialog
+        open={clearUploadsOpen}
+        title="Clear all PHR uploads?"
+        description="This deletes encrypted files (.enc) and JSON metadata from cloud storage. Accounts and cryptographic keys are kept. Use this to reset demos."
+        confirmText={clearingUploads ? "Clearing…" : "Clear uploads"}
+        cancelText="Cancel"
+        variant="destructive"
+        onConfirm={handleClearUploads}
+        onCancel={() => !clearingUploads && setClearUploadsOpen(false)}
+      />
 
       {/* Info Card */}
       <motion.div

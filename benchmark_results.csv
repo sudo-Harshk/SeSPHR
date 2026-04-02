@@ -1,0 +1,5 @@
+File Size (MB),Encryption Time (s),SRS Time (s),Decryption Time (s)
+100KB,0.01187,0.20444,0.06726
+1MB,0.00581,0.198,0.07735
+5MB,0.0122,0.18054,0.08157
+10MB,0.02647,0.18338,0.09548

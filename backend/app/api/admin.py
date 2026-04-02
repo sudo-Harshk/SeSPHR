@@ -3,6 +3,7 @@ from flask import Blueprint, request, session
 import os
 import json
 from app.services.storage.users import get_all_users_with_attributes, get_user_by_id, add_attribute, remove_attribute
+from app.services.audit.logger import verify_audit_log_file
 from app.services.utils import api_success, api_error
 from config import Config
 
@@ -54,19 +55,26 @@ def api_audit_logs():
     
     try:
         if not Config.AUDIT_LOG_PATH.exists():
-            return api_success({"logs": []})
-        
+            return api_success({
+                "logs": [],
+                "integrity": {"valid": True, "detail": ""},
+            })
+
         logs = []
         with open(Config.AUDIT_LOG_PATH, "r", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
-                if not line: continue
+                if not line:
+                    continue
                 try:
                     logs.append(json.loads(line))
                 except json.JSONDecodeError:
                     continue
-        
-        logs.sort(key=lambda x: x.get("timestamp", 0), reverse=True)
-        return api_success({"logs": logs})
+
+        ok, detail = verify_audit_log_file(Config.AUDIT_LOG_PATH)
+        return api_success({
+            "logs": logs,
+            "integrity": {"valid": ok, "detail": detail or ""},
+        })
     except Exception as e:
         return api_error(str(e), 500)

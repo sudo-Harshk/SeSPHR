@@ -9,7 +9,7 @@ import { motion, AnimatePresence } from "framer-motion"
 
 import SEO from "@/components/SEO"
 
-type Role = "patient" | "doctor" | "admin"
+type Role = "patient" | "doctor"
 
 export default function Signup() {
   const navigate = useNavigate()
@@ -217,7 +217,6 @@ export default function Signup() {
                   >
                     <option value="patient">Patient</option>
                     <option value="doctor">Doctor</option>
-                    <option value="admin">Admin</option>
                   </select>
                 </motion.div>
 

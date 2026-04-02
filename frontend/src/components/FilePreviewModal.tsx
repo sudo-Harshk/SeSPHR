@@ -6,7 +6,7 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Download, X, Loader2, ChevronLeft, ChevronRight, ZoomIn, ZoomOut } from "lucide-react"
+import { Download, X, Loader2, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Shield } from "lucide-react"
 import DocViewer, { DocViewerRenderers } from "@cyntler/react-doc-viewer"
 import { Document, Page, pdfjs } from 'react-pdf'
 import 'react-pdf/dist/Page/AnnotationLayer.css';
@@ -22,6 +22,11 @@ interface FilePreviewModalProps {
     fileUrl: string | null
     filename: string
     mimeType: string
+    portions?: {
+        name: string
+        key_blob: string
+        iv: string
+    }[]
 }
 
 export default function FilePreviewModal({
@@ -30,6 +35,7 @@ export default function FilePreviewModal({
     fileUrl,
     filename,
     mimeType,
+    portions = [],
 }: FilePreviewModalProps) {
     const [textContent, setTextContent] = useState<string | null>(null)
     const [loadingText, setLoadingText] = useState(false)
@@ -45,7 +51,8 @@ export default function FilePreviewModal({
         filename.toLowerCase().endsWith(".txt") ||
         filename.toLowerCase().endsWith(".log") ||
         filename.toLowerCase().endsWith(".json") ||
-        filename.toLowerCase().endsWith(".md")
+        filename.toLowerCase().endsWith(".md") ||
+        filename.toLowerCase().endsWith(".csv")
 
     const isPdf = mimeType === "application/pdf" || filename.toLowerCase().endsWith(".pdf")
     const isImage = mimeType.startsWith("image/") ||
@@ -55,12 +62,13 @@ export default function FilePreviewModal({
         if (isOpen && fileUrl && isText) {
             setLoadingText(true)
             fetch(fileUrl)
-                .then(res => res.text())
-                .then(text => {
+                .then((res) => res.arrayBuffer())
+                .then((buf) => {
+                    const text = new TextDecoder("utf-8", { fatal: false }).decode(buf)
                     setTextContent(text)
                     setLoadingText(false)
                 })
-                .catch(err => {
+                .catch((err) => {
                     console.error("Failed to load text content", err)
                     setTextContent("Failed to load text content.")
                     setLoadingText(false)
@@ -98,14 +106,26 @@ export default function FilePreviewModal({
         <Dialog open={isOpen} onOpenChange={onClose}>
             <DialogContent className="max-w-4xl h-[90vh] flex flex-col p-0 gap-0 [&>button]:hidden">
                 <DialogHeader className="px-6 py-4 border-b flex flex-row items-center justify-between space-y-0 shrink-0">
-                    <DialogTitle className="text-lg font-semibold truncate pr-8 flex items-center gap-2">
-                        {filename}
-                        {isPdf && !pdfLoading && (
-                            <div className="flex items-center gap-1 text-xs font-normal text-slate-500 bg-slate-100 px-2 py-1 rounded-full">
-                                Page {pageNumber} of {numPages}
+                    <div className="flex flex-col">
+                        <DialogTitle className="text-lg font-semibold truncate pr-8 flex items-center gap-2">
+                            {filename}
+                            {isPdf && !pdfLoading && (
+                                <div className="flex items-center gap-1 text-xs font-normal text-slate-500 bg-slate-100 px-2 py-1 rounded-full">
+                                    Page {pageNumber} of {numPages}
+                                </div>
+                            )}
+                        </DialogTitle>
+                        {portions.length > 0 && (
+                            <div className="flex gap-2 mt-2">
+                                {portions.map((p, i) => (
+                                     <span key={i} className="text-[10px] px-2 py-0.5 bg-green-100 text-green-700 border border-green-200 rounded-full font-medium flex items-center gap-1">
+                                         <Shield className="w-3 h-3" />
+                                         {p.name} (Decrypted)
+                                     </span>
+                                 ))}
                             </div>
                         )}
-                    </DialogTitle>
+                    </div>
                     <div className="flex items-center gap-2">
                         {isPdf && (
                             <div className="flex items-center gap-1 mr-4 bg-slate-100 rounded-md p-1">

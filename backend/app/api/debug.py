@@ -72,3 +72,66 @@ def api_my_private_key():
             return api_success({"private_key": f.read()})
             
     return api_error("Private key not found", 404)
+
+
+@bp.route("/ensure-my-keys", methods=["POST"])
+def api_ensure_my_keys():
+    """
+    Development: create RSA key pair for the logged-in user if missing, then return private key PEM.
+    Doctors need this for SRS re-encrypted key unwrap in the browser.
+    """
+    if os.environ.get("FLASK_ENV") != "development":
+        return api_error("Only available in development", 403)
+    if "user_id" not in session:
+        return api_error("Unauthorized", 401)
+
+    user_id = session["user_id"]
+    priv_path = Config.CLOUD_KEYS_USERS / f"{user_id}_private.pem"
+    if not priv_path.exists():
+        generate_user_keys(user_id)
+
+    with open(priv_path, "r") as f:
+        return api_success({"private_key": f.read()})
+
+
+@bp.route("/clear-uploads", methods=["POST"])
+def api_clear_uploads():
+    """
+    Development: remove ciphertext and metadata only (keep users, DB, SRS keys, user RSA keys).
+    """
+    if os.environ.get("FLASK_ENV") != "development":
+        return api_error("Debug only", 403)
+
+    try:
+        removed_data = 0
+        removed_meta = 0
+        if Config.CLOUD_DATA.exists():
+            for p in Config.CLOUD_DATA.iterdir():
+                if p.is_file() and p.suffix.lower() == ".enc":
+                    p.unlink()
+                    removed_data += 1
+        if Config.CLOUD_META.exists():
+            for p in Config.CLOUD_META.iterdir():
+                if p.is_file() and p.suffix.lower() == ".json":
+                    p.unlink()
+                    removed_meta += 1
+        return api_success({
+            "message": "PHR uploads cleared",
+            "removed_enc_files": removed_data,
+            "removed_meta_files": removed_meta,
+        })
+    except Exception as e:
+        return api_error(str(e), 500)
+
+
+@bp.route("/clear-audit-log", methods=["POST"])
+def api_clear_audit_log():
+    """Development: delete audit.log to fix a broken hash chain (e.g. concurrent writes before locking)."""
+    if os.environ.get("FLASK_ENV") != "development":
+        return api_error("Debug only", 403)
+    try:
+        if Config.AUDIT_LOG_PATH.exists():
+            Config.AUDIT_LOG_PATH.unlink()
+        return api_success({"message": "audit.log removed; new events will start a fresh chain."})
+    except Exception as e:
+        return api_error(str(e), 500)

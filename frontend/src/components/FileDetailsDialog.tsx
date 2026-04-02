@@ -14,6 +14,7 @@ interface FileItem {
     iv?: string
     key_blob?: string
     algorithm?: string
+    portions?: { name: string; policy: string }[]
 }
 
 interface FileDetailsDialogProps {
@@ -54,6 +55,30 @@ export default function FileDetailsDialog({
 
                 <div className="space-y-4 py-4">
                     <div className="grid grid-cols-1 gap-4">
+                        <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-1">
+                            <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                                <Shield className="w-4 h-4 text-slate-400" />
+                                <span>Access policy (global)</span>
+                            </div>
+                            <p className="text-sm font-mono text-slate-900 bg-white p-2 rounded border border-slate-100 break-all">
+                                {file.policy && file.policy !== "N/A" ? file.policy : "—"}
+                            </p>
+                        </div>
+
+                        {file.portions && file.portions.length > 0 && (
+                            <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-2">
+                                <div className="text-sm font-medium text-slate-700">Portion policies</div>
+                                <ul className="space-y-1 text-xs font-mono text-slate-800">
+                                    {file.portions.map((p, i) => (
+                                        <li key={i} className="bg-white p-2 rounded border border-slate-100">
+                                            <span className="font-semibold text-slate-600">{p.name || `Portion ${i + 1}`}:</span>{" "}
+                                            {p.policy || "—"}
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
+
                         <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-1">
                             <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
                                 <Info className="w-4 h-4 text-slate-400" />

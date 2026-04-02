@@ -3,6 +3,9 @@ import { FileText, Loader2, Shield, Eye, Download, Info } from "lucide-react"
 import FilePreviewModal from "@/components/FilePreviewModal"
 import { motion } from "framer-motion"
 import api from "@/services/api"
+import { useAuth } from "@/context/AuthContext"
+import { evaluatePolicy } from "@/utils/policy"
+import { mimeFromFilename } from "@/utils/mime"
 import {
   Table,
   TableBody,
@@ -23,12 +26,14 @@ const MotionTableRow = motion.create(TableRow)
 interface FileItem {
   filename: string
   owner: string | null
-  date?: number // timestamp
+  date?: number // timestamp (seconds since epoch from server)
   size?: number // bytes
   policy: string | null
   iv?: string
   key_blob?: string
   algorithm?: string
+  revoked_users?: string[]
+  portions?: { name: string; policy: string }[]
 }
 
 interface ApiResponse {
@@ -45,6 +50,11 @@ interface AccessResult {
   key_blob?: string
   iv?: string
   file_url?: string
+  portions?: {
+    name: string
+    key_blob: string
+    iv: string
+  }[]
 }
 
 const formatBytes = (bytes: number, decimals = 2) => {
@@ -59,7 +69,31 @@ const formatBytes = (bytes: number, decimals = 2) => {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`
 }
 
+/** Aligns with backend access rules for UI enable/disable (full-file decrypt). */
+function computeAccessRow(
+  file: FileItem,
+  userId: string | null,
+  attributes: Record<string, string>
+) {
+  const revokedList = file.revoked_users ?? []
+  const isRevoked = Boolean(userId && revokedList.includes(userId))
+  const globalMatch = evaluatePolicy(attributes, file.policy)
+  const portions = file.portions ?? []
+  const portionMatch = portions.some((p) => evaluatePolicy(attributes, p.policy))
+  const policyDenied =
+    typeof file.policy === "string" && file.policy.toLowerCase().includes("__revoked__")
+  const canDecryptFullFile = globalMatch && !isRevoked && !policyDenied
+  return {
+    isRevoked,
+    globalMatch,
+    portionMatch,
+    policyDenied,
+    canDecryptFullFile,
+  }
+}
+
 export default function DoctorFiles() {
+  const { userId, attributes } = useAuth()
   const [files, setFiles] = useState<FileItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -76,32 +110,61 @@ export default function DoctorFiles() {
     fileUrl: string | null
     filename: string
     mimeType: string
+    portions: { name: string; key_blob: string; iv: string }[]
   }>({
     isOpen: false,
     fileUrl: null,
     filename: "",
     mimeType: "",
+    portions: [],
   })
 
   // Details Dialog State
   const [selectedFileDetails, setSelectedFileDetails] = useState<FileItem | null>(null)
 
-  // 1. Fetch Doctor's Private Key on Mount
+  // Load RSA private key: in development auto-provision via ensure-my-keys; else fetch only.
   useEffect(() => {
-    api.get("/debug/my-private-key").then(async (res) => {
-      if (res.data.success && res.data.data?.private_key) {
+    if (!userId) return
+
+    const loadPrivateKey = async () => {
+      const applyPem = async (pem: string) => {
         try {
-          const key = await importPrivateKey(res.data.data.private_key)
+          const key = await importPrivateKey(pem)
           setDoctorPrivateKey(key)
         } catch (e) {
           console.error("Failed to import private key", e)
-          toast.error("Failed to load your private encryption key. Access will be limited.")
+          toast.error("Failed to load your private encryption key.")
         }
       }
-    }).catch(() => {
-      console.warn("Could not fetch private key. Maybe not generated yet?")
-    })
-  }, [])
+
+      try {
+        const ensure = await api.post("/debug/ensure-my-keys")
+        if (ensure.data.success && ensure.data.data?.private_key) {
+          await applyPem(ensure.data.data.private_key)
+          return
+        }
+      } catch {
+        // Production or ensure disabled — fall back to read-only fetch
+      }
+
+      try {
+        const res = await api.get("/debug/my-private-key")
+        if (res.data.success && res.data.data?.private_key) {
+          await applyPem(res.data.data.private_key)
+          return
+        }
+      } catch {
+        /* 404 expected if keys never created */
+      }
+
+      toast.message(
+        "No encryption keys for your account. Run the app with FLASK_ENV=development so keys are created automatically, or ask an admin to generate keys.",
+        { duration: 6000 }
+      )
+    }
+
+    loadPrivateKey()
+  }, [userId])
 
   useEffect(() => {
     const fetchFiles = async () => {
@@ -162,15 +225,19 @@ export default function DoctorFiles() {
           status: "granted",
           key_blob: response.data.data.key_blob,
           iv: response.data.data.iv,
-          file_url: response.data.data.file_url
+          file_url: response.data.data.file_url,
+          portions: response.data.data.portions || []
         }
 
         setAccessResults((prev) => {
           const newMap = new Map(prev)
           newMap.set(filename, result)
-          const currentUnlocked = JSON.parse(sessionStorage.getItem("unlocked_files") || "[]")
-          if (!currentUnlocked.includes(filename)) {
-            sessionStorage.setItem("unlocked_files", JSON.stringify([...currentUnlocked, filename]))
+          // Only persist files we can actually decrypt (global key present)
+          if (result.key_blob) {
+            const currentUnlocked = JSON.parse(sessionStorage.getItem("unlocked_files") || "[]")
+            if (!currentUnlocked.includes(filename)) {
+              sessionStorage.setItem("unlocked_files", JSON.stringify([...currentUnlocked, filename]))
+            }
           }
           return newMap
         })
@@ -216,6 +283,18 @@ export default function DoctorFiles() {
 
     if (accessResult?.status !== "granted") return null
 
+    if (!accessResult.key_blob || !accessResult.iv) {
+      toast.error(
+        "No file key for your account: global policy does not include you (portion-only access cannot decrypt this single encrypted file). Ask the patient to grant access via the main record policy."
+      )
+      return null
+    }
+
+    if (!doctorPrivateKey) {
+      toast.error("Encryption key not loaded — cannot decrypt this record.")
+      return null
+    }
+
     try {
       let downloadUrl = accessResult?.file_url || `/doctor/download/${filename}.enc`
       if (downloadUrl.startsWith("/api")) downloadUrl = downloadUrl.substring(4)
@@ -226,16 +305,13 @@ export default function DoctorFiles() {
         ? response.data
         : new Blob([response.data], { type: response.headers["content-type"] || "application/octet-stream" })
 
-      if (accessResult?.key_blob && accessResult?.iv && doctorPrivateKey) {
-        try {
-          const wrappedKey = accessResult.key_blob
-          const iv = accessResult.iv
-          const aesKey = await unwrapKey(wrappedKey, doctorPrivateKey)
-          finalBlob = await decryptFile(finalBlob, aesKey, iv)
-        } catch (cryptoError) {
-          console.error("Decryption failed:", cryptoError)
-          toast.warning("Decryption failed! Using raw file.")
-        }
+      try {
+        const aesKey = await unwrapKey(accessResult.key_blob, doctorPrivateKey)
+        finalBlob = await decryptFile(finalBlob, aesKey, accessResult.iv)
+      } catch (cryptoError) {
+        console.error("Decryption failed:", cryptoError)
+        toast.error("Decryption failed — the file may be corrupted or keys may not match.")
+        return null
       }
 
       const contentDisposition = response.headers["content-disposition"]
@@ -246,9 +322,11 @@ export default function DoctorFiles() {
       }
       if (downloadFilename.endsWith(".enc")) downloadFilename = downloadFilename.replace(".enc", "")
 
-      // Force valid MIME type for PDFs
+      const extMime = mimeFromFilename(downloadFilename)
       if (downloadFilename.toLowerCase().endsWith(".pdf")) {
         finalBlob = new Blob([finalBlob], { type: "application/pdf" })
+      } else if (!finalBlob.type && extMime) {
+        finalBlob = new Blob([finalBlob], { type: extMime })
       }
 
       return { blob: finalBlob, filename: downloadFilename }
@@ -267,13 +345,16 @@ export default function DoctorFiles() {
       if (!result) return
 
       const url = window.URL.createObjectURL(result.blob)
+      const mimeType = result.blob.type || mimeFromFilename(result.filename)
 
       setPreviewFile({
         isOpen: true,
         fileUrl: url,
         filename: result.filename,
-        mimeType: result.blob.type
+        mimeType,
+        portions: accessResults.get(filename)?.portions || []
       })
+      toast.success("Record decrypted in your browser — ciphertext was not decrypted on the server.")
 
     } catch (err: any) {
       const message = getFriendlyErrorMessage(err, "View failed")
@@ -299,7 +380,7 @@ export default function DoctorFiles() {
       link.click()
       document.body.removeChild(link)
       setTimeout(() => window.URL.revokeObjectURL(url), 1000)
-      toast.success("File downloaded successfully")
+      toast.success("Decrypted file downloaded (decryption happened in your browser).")
 
     } catch (err: any) {
       const message = getFriendlyErrorMessage(err, "Download failed")
@@ -323,15 +404,6 @@ export default function DoctorFiles() {
     if (status === 400 || status === 404) return "File unavailable"
     if (status === 401) return "Authentication required"
     return backendMsg || defaultMsg
-  }
-
-  // Helper to normalize policy
-  const getPolicyState = (policy: string | null) => {
-    if (!policy) return "Denied" // default safety
-    const p = policy.toLowerCase()
-    if (p.includes("doctor")) return "Doctor"
-    if (p.includes("revoked")) return "Revoked"
-    return "Denied" // catch-all for unknown/denied
   }
 
   if (loading) {
@@ -438,19 +510,37 @@ export default function DoctorFiles() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
       >
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h1 className="text-2xl font-bold text-slate-900">Accessible Health Records</h1>
-            <p className="text-slate-600 mt-1">View Personal Health Records you have access to</p>
+            <p className="text-slate-600 mt-1">
+              Records stored in the system. View/Download are enabled only when your attributes satisfy the file policy and you have a loaded identity key.
+            </p>
           </div>
-          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium border ${doctorPrivateKey
+          <div className={`shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium border ${doctorPrivateKey
             ? "bg-green-50 text-green-700 border-green-200"
             : "bg-amber-50 text-amber-700 border-amber-200"
             }`}>
             <Shield className="w-4 h-4" />
-            {doctorPrivateKey ? "Identity Token Loaded" : "Identity Token Missing"}
+            {doctorPrivateKey ? "Identity key loaded" : "Identity key missing"}
           </div>
         </div>
+        {Object.keys(attributes).length > 0 && (
+          <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+            <span className="font-medium text-slate-900">Your access attributes </span>
+            <span className="text-slate-500">(used with policies such as Role:Doctor, Dept:Cardiology):</span>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {Object.entries(attributes).map(([k, v]) => (
+                <span
+                  key={k}
+                  className="rounded-md border border-slate-200 bg-white px-2 py-0.5 font-mono text-xs text-slate-800"
+                >
+                  {k}: {v}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
       </motion.div>
 
       <motion.div
@@ -461,7 +551,9 @@ export default function DoctorFiles() {
         <Card>
           <CardHeader>
             <CardTitle>Files</CardTitle>
-            <CardDescription>{files.length} {files.length === 1 ? "file" : "files"} accessible</CardDescription>
+            <CardDescription>
+              {files.length} record{files.length === 1 ? "" : "s"} in cloud storage — access is enforced by policy on the server.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <Table className="w-full">
@@ -477,46 +569,54 @@ export default function DoctorFiles() {
               </TableHeader>
               <TableBody>
                 {files.map((file, index) => {
-                  const policyState = getPolicyState(file.policy)
-                  const isDoctor = policyState === "Doctor"
-                  const isRevokedOrDenied = policyState === "Revoked" || policyState === "Denied"
-
+                  const rowAccess = computeAccessRow(file, userId, attributes)
                   const isAccessing = accessing.has(file.filename)
                   const isDownloading = downloading.has(file.filename)
 
-                  // Row Styles
-                  // Active: Normal
-                  // Revoked/Denied: Dimmed (muted colors)
-                  const rowClass = `h-[68px] transition-colors ${isRevokedOrDenied ? "bg-slate-50/50 cursor-not-allowed" : "hover:bg-slate-50/50"
-                    }`
+                  const isBlocked =
+                    rowAccess.isRevoked ||
+                    rowAccess.policyDenied ||
+                    (!rowAccess.canDecryptFullFile && !rowAccess.portionMatch)
 
-                  // Text Styles
-                  // Active: Primary text
-                  // Revoked/Denied: Muted text
-                  const nameClass = isRevokedOrDenied ? "text-slate-500" : "text-slate-900"
-                  const ownerClass = isRevokedOrDenied ? "text-slate-400" : "text-slate-500"
+                  const isPortionsOnly = !rowAccess.canDecryptFullFile && rowAccess.portionMatch
 
-                  // Policy Pill Styles
+                  const rowClass = `h-[68px] transition-colors ${
+                    rowAccess.isRevoked || rowAccess.policyDenied
+                      ? "bg-slate-50/50"
+                      : isPortionsOnly
+                        ? "bg-amber-50/20"
+                        : "hover:bg-slate-50/50"
+                  }`
+
+                  const nameClass =
+                    rowAccess.isRevoked || rowAccess.policyDenied || isBlocked
+                      ? "text-slate-500"
+                      : "text-slate-900"
+                  const ownerClass = isBlocked ? "text-slate-400" : "text-slate-500"
+
                   let pillClass = ""
                   let pillText = ""
 
-                  if (policyState === "Doctor") {
-                    pillClass = "bg-green-50 text-green-700 border-green-200"
-                    pillText = "Doctor"
-                  } else if (policyState === "Revoked") {
-                    pillClass = "bg-slate-100 text-slate-500 border-slate-200"
+                  if (rowAccess.isRevoked) {
+                    pillClass = "bg-slate-100 text-slate-600 border-slate-200"
                     pillText = "Revoked"
+                  } else if (rowAccess.policyDenied) {
+                    pillClass = "bg-slate-100 text-slate-500 border-slate-200"
+                    pillText = "Revoked (policy)"
+                  } else if (rowAccess.canDecryptFullFile) {
+                    pillClass = "bg-green-50 text-green-700 border-green-200"
+                    pillText = "Full access"
+                  } else if (isPortionsOnly) {
+                    pillClass = "bg-amber-50 text-amber-800 border-amber-200"
+                    pillText = "Portions only"
                   } else {
                     pillClass = "bg-red-50 text-red-600 border-red-200"
-                    pillText = "Denied"
+                    pillText = "No access"
                   }
 
-                  // Action Logic
-                  // Policy = Doctor: Info (enabled), View (enabled, primary), Download (enabled, secondary)
-                  // Policy = Revoked/Denied: Info (enabled), View (disabled), Download (disabled)
-
-                  const canView = isDoctor
-                  const canDownload = isDoctor
+                  const canView =
+                    rowAccess.canDecryptFullFile && !!doctorPrivateKey
+                  const canDownload = canView
 
                   const isGlobalLoading = isAccessing || isDownloading
 
@@ -530,7 +630,7 @@ export default function DoctorFiles() {
                     >
                       <TableCell className="px-4 py-0 font-medium h-[68px]">
                         <div className="h-full flex items-center gap-1.5">
-                          <FileText className={`w-4 h-4 shrink-0 ${isRevokedOrDenied ? "text-slate-400" : "text-slate-500"}`} />
+                          <FileText className={`w-4 h-4 shrink-0 ${isBlocked ? "text-slate-400" : "text-slate-500"}`} />
                           <div className="max-w-[400px]">
                             <span className={`block truncate font-semibold ${nameClass}`}>{file.filename}</span>
                           </div>
@@ -538,7 +638,7 @@ export default function DoctorFiles() {
                       </TableCell>
                       <TableCell className="px-4 py-0 h-[68px]">
                         <div className={`h-full flex items-center truncate text-xs ${ownerClass}`}>
-                          {file.date ? (
+                          {file.date != null && file.date > 0 ? (
                             new Date(file.date * 1000).toLocaleDateString("en-US", {
                               year: 'numeric',
                               month: 'short',
@@ -577,8 +677,8 @@ export default function DoctorFiles() {
                             variant="ghost"
                             size="sm"
                             onClick={() => setSelectedFileDetails(file)}
-                            className={`h-8 w-8 p-0 ${isRevokedOrDenied ? "opacity-30" : ""}`}
-                            disabled={!!isRevokedOrDenied}
+                            className="h-8 w-8 p-0"
+                            title="File metadata"
                           >
                             <Info className="w-4 h-4 text-slate-400" />
                           </Button>
@@ -588,7 +688,14 @@ export default function DoctorFiles() {
                             variant="default"
                             size="sm"
                             onClick={() => handleView(file.filename)}
-                            disabled={!canView || isGlobalLoading || !doctorPrivateKey}
+                            disabled={!canView || isGlobalLoading}
+                            title={
+                              !doctorPrivateKey
+                                ? "Load your identity key first"
+                                : isPortionsOnly
+                                  ? "Full file key not shared — portion-only access cannot decrypt this upload"
+                                  : undefined
+                            }
                             className={`h-8 px-3 gap-2 shadow-sm whitespace-nowrap ${!canView
                               ? "bg-slate-100 text-slate-400 border border-slate-200" // Disabled look
                               : "bg-slate-900 text-white hover:bg-slate-800"
@@ -608,6 +715,7 @@ export default function DoctorFiles() {
                             size="sm"
                             onClick={() => handleDownload(file.filename)}
                             disabled={!canDownload || isGlobalLoading}
+                            title={!doctorPrivateKey ? "Identity key required" : undefined}
                             className={`h-8 w-8 p-0 ${!canDownload ? "opacity-50" : ""}`}
                           >
                             <Download className="w-3 h-3" />
@@ -632,6 +740,7 @@ export default function DoctorFiles() {
         fileUrl={previewFile.fileUrl}
         filename={previewFile.filename}
         mimeType={previewFile.mimeType}
+        portions={previewFile.portions}
       />
 
       <FileDetailsDialog

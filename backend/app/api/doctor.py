@@ -1,4 +1,3 @@
-
 from flask import Blueprint, request, session, send_file
 import os
 import json
@@ -41,6 +40,7 @@ def api_files():
                     mtime = os.path.getmtime(file_path)
                     size = os.path.getsize(file_path)
                     
+                    portions = meta.get("portions") or []
                     files.append({
                         "filename": original_filename,
                         "enc_filename": enc_filename,
@@ -50,7 +50,12 @@ def api_files():
                         "policy": meta.get("policy", "N/A"),
                         "iv": meta.get("iv", "N/A"),
                         "key_blob": meta.get("key_blob", "N/A"),
-                        "algorithm": "AES-GCM-256 + RSA-OAEP"
+                        "algorithm": "AES-GCM-256 + RSA-OAEP",
+                        "revoked_users": meta.get("revoked_users", []),
+                        "portions": [
+                            {"name": p.get("name", ""), "policy": p.get("policy", "")}
+                            for p in portions
+                        ],
                     })
                 except (json.JSONDecodeError, IOError):
                     continue
@@ -106,34 +111,54 @@ def api_access():
         doctor_user = SimpleNamespace(**doctor_user_data)
         doctor_user.attributes = get_user_attributes(session["user_id"])
         
-        # 1. Policy
-        if not evaluate_policy(doctor_user, meta["policy"]):
-            audit_deny(session["user_id"], filename, "DENIED_POLICY")
-            return api_error("Access denied: policy not satisfied", 403)
-
+        # 1. Check Global Policy (Optional: if no global policy, check individual portions)
+        has_global_access = evaluate_policy(doctor_user, meta.get("policy", ""))
+        
         # 2. Revocation
         if session["user_id"] in meta.get("revoked_users", []):
             audit_deny(session["user_id"], filename, "DENIED_REVOKED")
             return api_error("Access denied: You have been revoked by the owner", 403)
 
-        # 3. Re-Encryption
+        # 3. Check Granular Portions
+        portions = meta.get("portions", [])
+        accessible_portions = []
+        
+        for p in portions:
+            if evaluate_policy(doctor_user, p["policy"]):
+                # Re-encrypt each accessible portion key
+                try:
+                    re_enc_key = re_encrypt_key(p["key_blob"], session["user_id"])
+                    accessible_portions.append({
+                        "name": p["name"],
+                        "key_blob": re_enc_key,
+                        "iv": p["iv"]
+                    })
+                except Exception as e:
+                    print(f"ERROR: Portion re-encryption failed for {p['name']}: {e}")
+
+        # 4. Final Access Decision
+        if not has_global_access and not accessible_portions:
+            audit_deny(session["user_id"], filename, "DENIED_POLICY")
+            return api_error("Access denied: No parts of this record are accessible with your attributes", 403)
+
+        # 5. Return Results
         if meta.get("mode") == "client_side_encryption":
             key_blob = meta.get("key_blob")
             iv = meta.get("iv")
             
-            if not key_blob:
-                return api_error("Key blob missing in metadata", 500)
+            re_encrypted_global_key = None
+            if has_global_access and key_blob:
+                re_encrypted_global_key = re_encrypt_key(key_blob, session["user_id"])
                 
-            re_encrypted_key = re_encrypt_key(key_blob, session["user_id"])
-                
-            log_event(session["user_id"], filename, "ACCESS", "GRANTED_RE_ENCRYPT")
+            log_event(session["user_id"], filename, "ACCESS", f"GRANTED_GRANULAR (portions: {len(accessible_portions)})")
 
             return api_success({
                 "status": "granted",
-                "key_blob": re_encrypted_key,
+                "key_blob": re_encrypted_global_key,
                 "iv": iv,
+                "portions": accessible_portions,
                 "file_url": f"/api/doctor/download/{meta['file']}",
-                "message": "Access granted. Key re-encrypted for your identity."
+                "message": "Access granted. Check 'portions' for granular field keys."
             })
             
         else:

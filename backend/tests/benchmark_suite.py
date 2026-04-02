@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from Crypto.Cipher import AES, PKCS1_OAEP
 from Crypto.PublicKey import RSA
 from Crypto.Random import get_random_bytes
-from Crypto.Hash import SHA256
+from Crypto.Hash import SHA256, SHA1
 
 from app import create_app
 from app.services.crypto.keys import get_or_create_srs_key, generate_user_keys, get_user_public_key
@@ -63,7 +63,8 @@ def client_decrypt(encrypted_blob, wrapped_key_hex, iv_hex, doctor_private_key_p
     """
     # 1. Unwrap Key
     doctor_private_key = RSA.import_key(doctor_private_key_pem)
-    cipher_rsa = PKCS1_OAEP.new(doctor_private_key, hashAlgo=SHA256)
+    # The backend uses SHA-1 for the re-encrypted key for doctor compatibility
+    cipher_rsa = PKCS1_OAEP.new(doctor_private_key, hashAlgo=SHA1)
     
     encrypted_key_bytes = bytes.fromhex(wrapped_key_hex)
     aes_key = cipher_rsa.decrypt(encrypted_key_bytes)
@@ -153,11 +154,18 @@ def run_benchmark():
             
         filename = f"bench_{size_label}_{int(time.time())}.txt"
         
+        # Add granular portions for simulation
+        portions = [
+            {"name": "Lab Results", "policy": "Dept:Pathology", "key_blob": wrapped_key_for_srs, "iv": iv_hex},
+            {"name": "Doctor Notes", "policy": "Role:Doctor", "key_blob": wrapped_key_for_srs, "iv": iv_hex}
+        ]
+        
         upload_data = {
-            'file': (io.BytesIO(enc_blob), filename), # Not .enc, backend adds it? Or we should? Backend logic: "file.filename". 
+            'file': (io.BytesIO(enc_blob), filename),
             'policy': f"Role:Doctor", # Simple Policy
             'key_blob': wrapped_key_for_srs,
-            'iv': iv_hex
+            'iv': iv_hex,
+            'portions': json.dumps(portions)
         }
         
         # Upload
