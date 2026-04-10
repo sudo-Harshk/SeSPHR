@@ -5,59 +5,7 @@
 
 ---
 
-## 1. High-Level System Overview
-
-Three entities interact in the SeSPHR system. The cloud stores only ciphertext. The SRS enforces access control. The patient controls everything.
-
-```mermaid
-graph TB
-    subgraph Patient["👤 PHR Owner (Patient)"]
-        P_APP["Patient Browser\nReact + Web Crypto API"]
-    end
-
-    subgraph SRS["🔐 SRS — Setup & Re-encryption Server"]
-        SRS_POLICY["Policy Engine\nBoolean Attribute Evaluator"]
-        SRS_KEYS["Key Store\nRSA-2048 Key Pairs"]
-        SRS_REENC["Re-encryption Module\nRSA-OAEP Transform"]
-        SRS_AUDIT["Audit Logger\nSHA-256 Hash Chain"]
-        SRS_ACL["Access Control List\nFile → User Permissions"]
-    end
-
-    subgraph Cloud["☁️ Untrusted Cloud Storage"]
-        CLOUD_DATA["Encrypted PHR Files\n.enc (AES-GCM ciphertext)"]
-        CLOUD_META["Metadata Store\n.json (policy, key_blob, portions)"]
-    end
-
-    subgraph Doctor["🩺 Data User (Doctor / Pharmacist)"]
-        D_APP["Doctor Browser\nReact + Web Crypto API"]
-    end
-
-    subgraph Admin["🛡️ System Administrator"]
-        A_APP["Admin Dashboard\nUser mgmt, Audit, Benchmarks"]
-    end
-
-    P_APP -->|"① Encrypt PHR (AES-GCM)\nWrap key with SRS public key"| SRS
-    P_APP -->|"② Upload ciphertext + metadata"| Cloud
-    P_APP -->|"③ Set ACL / portions / policy"| SRS
-
-    D_APP -->|"④ Request access (filename)"| SRS
-    SRS_POLICY -->|"⑤ Evaluate: Role:Doctor AND Dept:Cardiology"| SRS_ACL
-    SRS_REENC -->|"⑥ Re-encrypt AES key → Doctor's public key"| D_APP
-    D_APP -->|"⑦ Download ciphertext"| Cloud
-    D_APP -->|"⑧ Decrypt in browser with re-encrypted key"| D_APP
-
-    Admin -->|"View audit log, manage users, view benchmarks"| SRS
-
-    style Patient fill:#dbeafe,stroke:#3b82f6
-    style SRS fill:#ede9fe,stroke:#8b5cf6
-    style Cloud fill:#fef9c3,stroke:#eab308
-    style Doctor fill:#dcfce7,stroke:#22c55e
-    style Admin fill:#fee2e2,stroke:#ef4444
-```
-
----
-
-## 2. PHR Upload Flow (Patient Side)
+## 1. PHR Upload Flow (Patient Side)
 
 The patient encrypts locally. The cloud never receives the key.
 
@@ -87,7 +35,7 @@ sequenceDiagram
 
 ---
 
-## 3. Access Request Flow (Doctor Side)
+## 2. Access Request Flow (Doctor Side)
 
 The SRS evaluates policy, re-encrypts the key, and the doctor decrypts in the browser.
 
@@ -125,7 +73,7 @@ sequenceDiagram
 
 ---
 
-## 4. PHR Portions — Granular Access Control
+## 3. PHR Portions — Granular Access Control
 
 A single PHR is split into logical partitions. Each has its own policy and encryption key.
 
@@ -161,7 +109,7 @@ graph LR
 
 ---
 
-## 5. Proxy Re-encryption Key Transform
+## 4. Proxy Re-encryption Key Transform
 
 The SRS transforms the key without ever exposing the plaintext AES key to the cloud or any unauthorised party.
 
@@ -186,7 +134,7 @@ graph TD
 
 ---
 
-## 6. Audit Log — Tamper-Evident Hash Chain
+## 5. Audit Log — Tamper-Evident Hash Chain
 
 Every access event is chained with SHA-256. Any tampering breaks the chain and is detected instantly.
 
@@ -207,7 +155,7 @@ graph LR
 
 ---
 
-## 7. Technology Stack
+## 6. Technology Stack
 
 ```mermaid
 graph TB
@@ -240,7 +188,7 @@ graph TB
 
 ---
 
-## 8. Project Directory Map
+## 7. Project Directory Map
 
 ```
 sesphr/
