@@ -10,13 +10,18 @@
 Run these commands **before** entering the room. Have both servers running and the browser open.
 
 ```bash
-# Terminal 1 — Backend
+# Terminal 1 — Backend (first time on any machine)
 cd backend
+python -m venv venv
 .\venv\Scripts\activate        # Windows
+# source venv/bin/activate     # Mac/Linux
+pip install -r requirements.txt
+python seed_demo_users.py      # Creates DB tables + demo accounts
 python run.py
 
 # Terminal 2 — Frontend
 cd frontend
+npm install
 npm run dev
 ```
 

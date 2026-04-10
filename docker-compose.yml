@@ -1,0 +1,30 @@
+services:
+
+  backend:
+    build:
+      context: .                  # Project root — so backend/ and cloud/ paths resolve correctly
+      dockerfile: backend/Dockerfile
+    ports:
+      - "5000:5000"               # Exposed for direct API access / debugging
+    environment:
+      - FLASK_ENV=development
+    volumes:
+      - sesphr_cloud:/app/cloud               # Encrypted PHR files + metadata + keys
+      - sesphr_db:/app/backend/app/services/storage  # SQLite database
+      - sesphr_audit:/app/backend/app/services/audit # Audit log
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend         # Only the frontend dir needed for the React build
+      dockerfile: Dockerfile
+    ports:
+      - "5173:80"                 # Access the app at http://localhost:5173
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  sesphr_cloud:    # Persists encrypted files, metadata, and RSA keys across restarts
+  sesphr_db:       # Persists the SQLite user + attribute database
+  sesphr_audit:    # Persists the tamper-evident audit log
