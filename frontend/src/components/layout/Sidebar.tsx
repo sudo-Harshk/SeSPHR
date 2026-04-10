@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom"
-import { LayoutDashboard, FileText, FolderOpen, Shield, FileSearch } from "lucide-react" // Added icons
+import { LayoutDashboard, FileText, FolderOpen, Shield, FileSearch, BarChart2, Users } from "lucide-react"
 import { motion } from "framer-motion"
 
 const links = {
@@ -13,7 +13,9 @@ const links = {
   ],
   admin: [
     { to: "/admin", label: "Admin Panel", icon: Shield },
+    { to: "/admin/users", label: "Users", icon: Users },
     { to: "/admin/audit", label: "Audit Logs", icon: FileSearch },
+    { to: "/admin/benchmark", label: "Performance", icon: BarChart2 },
   ],
 }
 

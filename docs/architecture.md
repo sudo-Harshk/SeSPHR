@@ -1,0 +1,290 @@
+# SeSPHR — System Architecture
+
+> **Based on:** *"SeSPHR: A Methodology for Secure Sharing of Personal Health Records in the Cloud"*
+> Mazhar Ali, Assad Abbas, Muhammad Usman Shahid Khan, Samee U. Khan — IEEE
+
+---
+
+## 1. High-Level System Overview
+
+Three entities interact in the SeSPHR system. The cloud stores only ciphertext. The SRS enforces access control. The patient controls everything.
+
+```mermaid
+graph TB
+    subgraph Patient["👤 PHR Owner (Patient)"]
+        P_APP["Patient Browser\nReact + Web Crypto API"]
+    end
+
+    subgraph SRS["🔐 SRS — Setup & Re-encryption Server"]
+        SRS_POLICY["Policy Engine\nBoolean Attribute Evaluator"]
+        SRS_KEYS["Key Store\nRSA-2048 Key Pairs"]
+        SRS_REENC["Re-encryption Module\nRSA-OAEP Transform"]
+        SRS_AUDIT["Audit Logger\nSHA-256 Hash Chain"]
+        SRS_ACL["Access Control List\nFile → User Permissions"]
+    end
+
+    subgraph Cloud["☁️ Untrusted Cloud Storage"]
+        CLOUD_DATA["Encrypted PHR Files\n.enc (AES-GCM ciphertext)"]
+        CLOUD_META["Metadata Store\n.json (policy, key_blob, portions)"]
+    end
+
+    subgraph Doctor["🩺 Data User (Doctor / Pharmacist)"]
+        D_APP["Doctor Browser\nReact + Web Crypto API"]
+    end
+
+    subgraph Admin["🛡️ System Administrator"]
+        A_APP["Admin Dashboard\nUser mgmt, Audit, Benchmarks"]
+    end
+
+    P_APP -->|"① Encrypt PHR (AES-GCM)\nWrap key with SRS public key"| SRS
+    P_APP -->|"② Upload ciphertext + metadata"| Cloud
+    P_APP -->|"③ Set ACL / portions / policy"| SRS
+
+    D_APP -->|"④ Request access (filename)"| SRS
+    SRS_POLICY -->|"⑤ Evaluate: Role:Doctor AND Dept:Cardiology"| SRS_ACL
+    SRS_REENC -->|"⑥ Re-encrypt AES key → Doctor's public key"| D_APP
+    D_APP -->|"⑦ Download ciphertext"| Cloud
+    D_APP -->|"⑧ Decrypt in browser with re-encrypted key"| D_APP
+
+    Admin -->|"View audit log, manage users, view benchmarks"| SRS
+
+    style Patient fill:#dbeafe,stroke:#3b82f6
+    style SRS fill:#ede9fe,stroke:#8b5cf6
+    style Cloud fill:#fef9c3,stroke:#eab308
+    style Doctor fill:#dcfce7,stroke:#22c55e
+    style Admin fill:#fee2e2,stroke:#ef4444
+```
+
+---
+
+## 2. PHR Upload Flow (Patient Side)
+
+The patient encrypts locally. The cloud never receives the key.
+
+```mermaid
+sequenceDiagram
+    participant Browser as Patient Browser<br/>(Web Crypto API)
+    participant SRS as SRS Backend
+    participant Cloud as Cloud Storage
+
+    Browser->>SRS: GET /api/debug/srs-public-key
+    SRS-->>Browser: RSA-2048 Public Key (PEM)
+
+    Note over Browser: Generate random 256-bit AES-GCM key
+    Note over Browser: Encrypt PHR file → ciphertext (.enc)
+    Note over Browser: Wrap AES key with SRS RSA public key → key_blob
+    Note over Browser: For each portion, generate separate AES key + wrap
+
+    Browser->>SRS: POST /api/patient/upload
+    Note right of Browser: { file: ciphertext,<br/>  policy: "Role:Doctor AND Dept:Cardiology",<br/>  key_blob: RSA(AES_key),<br/>  iv: base64,<br/>  portions: [{name, policy, key_blob, iv}] }
+
+    SRS->>Cloud: Store .enc file
+    SRS->>Cloud: Store .json metadata (policy, key_blob, portions, iv)
+    SRS-->>Browser: { status: "success" }
+
+    Note over Cloud: Cloud holds only ciphertext.<br/>It cannot decrypt anything.
+```
+
+---
+
+## 3. Access Request Flow (Doctor Side)
+
+The SRS evaluates policy, re-encrypts the key, and the doctor decrypts in the browser.
+
+```mermaid
+sequenceDiagram
+    participant Browser as Doctor Browser<br/>(Web Crypto API)
+    participant SRS as SRS Backend
+    participant Cloud as Cloud Storage
+
+    Browser->>SRS: POST /api/doctor/access { file: "record.pdf" }
+
+    SRS->>SRS: Load metadata (policy, key_blob, portions)
+    SRS->>SRS: Check revoked_users list
+    SRS->>SRS: evaluate_policy(doctor.attributes, file.policy)
+    Note right of SRS: e.g. Role=Doctor, Dept=Cardiology<br/>→ "(Role:Doctor AND Dept:Cardiology)" → TRUE
+
+    alt Access Granted
+        SRS->>SRS: re_encrypt_key(key_blob, doctor_user_id)
+        Note right of SRS: ① Decrypt key_blob with SRS private key → AES key<br/>② Encrypt AES key with Doctor's RSA public key
+        SRS-->>Browser: { status: "granted",<br/>  key_blob: RSA_doctor(AES_key),<br/>  portions: [{name, key_blob, iv}] }
+        SRS->>SRS: audit_log(GRANTED)
+
+        Browser->>Cloud: GET /api/doctor/download/record.pdf.enc
+        Cloud-->>Browser: ciphertext bytes
+
+        Note over Browser: unwrapKey(key_blob, doctor_private_key) → AES key
+        Note over Browser: decryptFile(ciphertext, AES_key, iv) → plaintext
+        Note over Browser: File decrypted entirely in browser.<br/>Plaintext never sent over network.
+
+    else Access Denied
+        SRS-->>Browser: 403 { error: "Access denied: policy mismatch" }
+        SRS->>SRS: audit_log(DENIED_POLICY)
+    end
+```
+
+---
+
+## 4. PHR Portions — Granular Access Control
+
+A single PHR is split into logical partitions. Each has its own policy and encryption key.
+
+```mermaid
+graph LR
+    subgraph PHR["📄 Patient Health Record"]
+        P1["Personal Info\npolicy: Role:Admin"]
+        P2["Medical Records\npolicy: Role:Doctor AND Dept:Cardiology"]
+        P3["Insurance Info\npolicy: Role:Doctor OR Role:Insurer"]
+        P4["Prescriptions\npolicy: Role:Doctor OR Role:Pharmacist"]
+    end
+
+    subgraph Users["Data Users"]
+        U1["👤 Dr. Raj (Cardiology)\nRole:Doctor, Dept:Cardiology"]
+        U2["👤 Dr. Priya (Orthopedics)\nRole:Doctor, Dept:Orthopedics"]
+        U3["👤 Pharmacist\nRole:Pharmacist"]
+        U4["👤 Admin\nRole:Admin"]
+    end
+
+    P1 -->|"✅ Access"| U4
+    P2 -->|"✅ Access"| U1
+    P2 -->|"❌ Denied"| U2
+    P3 -->|"✅ Access"| U1
+    P3 -->|"✅ Access"| U2
+    P4 -->|"✅ Access"| U1
+    P4 -->|"✅ Access"| U3
+
+    style P1 fill:#fee2e2,stroke:#ef4444
+    style P2 fill:#dbeafe,stroke:#3b82f6
+    style P3 fill:#fef9c3,stroke:#eab308
+    style P4 fill:#dcfce7,stroke:#22c55e
+```
+
+---
+
+## 5. Proxy Re-encryption Key Transform
+
+The SRS transforms the key without ever exposing the plaintext AES key to the cloud or any unauthorised party.
+
+```mermaid
+graph TD
+    A["🔑 AES-256 Key\n(plaintext, generated by patient)"]
+
+    A -->|"RSA-OAEP encrypt\nwith SRS public key"| B["📦 key_blob_SRS\nRSA_SRS_pub(AES_key)\nStored in metadata"]
+
+    B -->|"RSA-OAEP decrypt\nwith SRS private key\n(SRS sees AES key briefly)"| C["🔑 AES-256 Key\n(recovered by SRS)"]
+
+    C -->|"RSA-OAEP encrypt\nwith Doctor's public key"| D["📦 key_blob_Doctor\nRSA_Doctor_pub(AES_key)\nSent to doctor"]
+
+    D -->|"RSA-OAEP decrypt\nwith Doctor's private key\n(only in doctor's browser)"| E["🔑 AES-256 Key\n(doctor can now decrypt file)"]
+
+    style A fill:#fef9c3,stroke:#eab308
+    style B fill:#fee2e2,stroke:#ef4444
+    style C fill:#ede9fe,stroke:#8b5cf6
+    style D fill:#dbeafe,stroke:#3b82f6
+    style E fill:#dcfce7,stroke:#22c55e
+```
+
+---
+
+## 6. Audit Log — Tamper-Evident Hash Chain
+
+Every access event is chained with SHA-256. Any tampering breaks the chain and is detected instantly.
+
+```mermaid
+graph LR
+    G["Genesis\nprev_hash: ''"] --> E1
+    E1["Entry 1\nUSER: patient1\nACTION: UPLOAD\nhash: sha256(E1)"] --> E2
+    E2["Entry 2\nUSER: dr_cardio\nACTION: ACCESS\nstatus: GRANTED\nhash: sha256(E2)"] --> E3
+    E3["Entry 3\nUSER: dr_ortho\nACTION: ACCESS\nstatus: DENIED_POLICY\nhash: sha256(E3)"] --> E4
+    E4["Entry 4\nUSER: patient1\nACTION: REVOKE\nhash: sha256(E4)"]
+
+    style G fill:#f1f5f9,stroke:#94a3b8
+    style E1 fill:#dcfce7,stroke:#22c55e
+    style E2 fill:#dcfce7,stroke:#22c55e
+    style E3 fill:#fee2e2,stroke:#ef4444
+    style E4 fill:#fef9c3,stroke:#eab308
+```
+
+---
+
+## 7. Technology Stack
+
+```mermaid
+graph TB
+    subgraph Frontend["Frontend — React + Vite"]
+        F1["React 19 + TypeScript"]
+        F2["Web Crypto API\nAES-GCM + RSA-OAEP"]
+        F3["Tailwind CSS + Radix UI"]
+        F4["Framer Motion\nAnimations"]
+        F5["Recharts\nBenchmark visualisation"]
+    end
+
+    subgraph Backend["Backend — Flask (Python)"]
+        B1["Flask REST API"]
+        B2["PyCryptodome\nRSA-OAEP operations"]
+        B3["Argon2\nPassword hashing"]
+        B4["SQLite\nUser + attribute store"]
+        B5["Boolean Policy Engine\nAND / OR / parentheses"]
+        B6["SHA-256 Audit Logger\nHash chained JSONL"]
+    end
+
+    subgraph Storage["Storage — File System (Cloud Sim)"]
+        S1["/cloud/data/*.enc\nAES-GCM ciphertext"]
+        S2["/cloud/meta/*.json\nPolicy + key metadata"]
+        S3["/cloud/keys/\nRSA key pairs (PEM)"]
+    end
+
+    Frontend <-->|"REST API\nHTTP + session cookie"| Backend
+    Backend <-->|"Read / Write"| Storage
+```
+
+---
+
+## 8. Project Directory Map
+
+```
+sesphr/
+├── backend/
+│   ├── app/
+│   │   ├── api/
+│   │   │   ├── auth.py          # Login, signup, session
+│   │   │   ├── patient.py       # Upload, revoke, grant
+│   │   │   ├── doctor.py        # Access request, download
+│   │   │   └── admin.py         # Users, audit, benchmark
+│   │   └── services/
+│   │       ├── crypto/
+│   │       │   ├── keys.py      # RSA key generation (SRS + users)
+│   │       │   └── ops.py       # Proxy re-encryption (SRS core)
+│   │       ├── policy/
+│   │       │   └── parser.py    # Boolean attribute policy engine
+│   │       ├── audit/
+│   │       │   └── logger.py    # SHA-256 hash-chained audit log
+│   │       └── storage/
+│   │           ├── users.py     # SQLite user + attribute CRUD
+│   │           └── phr.py       # Encrypted PHR file store
+│   ├── seed_demo_users.py       # Creates demo accounts
+│   └── tests/
+│       └── benchmark_suite.py   # Performance benchmarks
+│
+├── frontend/
+│   └── src/
+│       ├── pages/
+│       │   ├── patient/         # Upload, manage, revoke
+│       │   ├── doctor/          # Request access, view, download
+│       │   └── admin/           # Users, audit, benchmark charts
+│       └── utils/
+│           ├── crypto.ts        # Web Crypto API wrappers
+│           └── policy.ts        # Client-side policy preview
+│
+├── cloud/                       # Simulated cloud storage
+│   ├── data/                    # .enc files
+│   ├── meta/                    # .json metadata
+│   └── keys/                    # RSA key pairs
+│
+├── docs/
+│   ├── architecture.md          # This file
+│   └── demo-guide.md            # Step-by-step demo script
+│
+└── Paper/
+    └── SeSPHR_*.pdf             # Reference paper
+```

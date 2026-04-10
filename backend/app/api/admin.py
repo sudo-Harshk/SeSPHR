@@ -1,6 +1,7 @@
 
 from flask import Blueprint, request, session
 import os
+import csv
 import json
 from app.services.storage.users import get_all_users_with_attributes, get_user_by_id, add_attribute, remove_attribute
 from app.services.audit.logger import verify_audit_log_file
@@ -78,3 +79,28 @@ def api_audit_logs():
         })
     except Exception as e:
         return api_error(str(e), 500)
+
+@bp.route("/benchmark")
+def api_benchmark():
+    if "user_id" not in session or session.get("role") != "admin":
+        return api_error("Unauthorized", 403)
+
+    csv_path = Config.BASE_DIR.parent / "benchmark_results.csv"
+    if not csv_path.exists():
+        return api_error("Benchmark results not found", 404)
+
+    rows = []
+    try:
+        with open(csv_path, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                rows.append({
+                    "file_size": row.get("File Size (MB)", ""),
+                    "encryption_time": float(row.get("Encryption Time (s)", 0)),
+                    "srs_time": float(row.get("SRS Time (s)", 0)),
+                    "decryption_time": float(row.get("Decryption Time (s)", 0)),
+                })
+    except Exception as e:
+        return api_error(f"Failed to parse benchmark file: {str(e)}", 500)
+
+    return api_success({"results": rows})

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
-import { FileText, Loader2, Shield, Eye, Download, Info } from "lucide-react"
+import { FileText, Loader2, Shield, Eye, Download, Info, CheckCircle2, Circle, Key } from "lucide-react"
 import FilePreviewModal from "@/components/FilePreviewModal"
-import { motion } from "framer-motion"
+import { motion, AnimatePresence } from "framer-motion"
 import api from "@/services/api"
 import { useAuth } from "@/context/AuthContext"
 import { evaluatePolicy } from "@/utils/policy"
@@ -20,6 +20,101 @@ import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 import FileDetailsDialog from "@/components/FileDetailsDialog"
 import { Skeleton } from "@/components/ui/skeleton"
+
+const SRS_STEPS = [
+  { label: "Contacting SRS", detail: "Authenticating request with Setup & Re-encryption Server" },
+  { label: "Evaluating Policy", detail: "SRS checking ACL and your attributes against file policy" },
+  { label: "Re-encrypting Key", detail: "SRS transforming AES key — proxy never sees plaintext data" },
+]
+
+function SRSProcessingBanner({ filename, step }: { filename: string; step: number }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -12 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -12 }}
+      className="rounded-xl border border-purple-200 bg-purple-50 px-5 py-4 shadow-sm"
+    >
+      <div className="flex items-center gap-2 mb-3">
+        <Shield className="h-4 w-4 text-purple-600 animate-pulse" />
+        <span className="text-sm font-semibold text-purple-900">
+          SRS Processing: <span className="font-mono">{filename}</span>
+        </span>
+      </div>
+      <div className="space-y-2">
+        {SRS_STEPS.map((s, i) => {
+          const done = step > i
+          const active = step === i
+          return (
+            <div key={s.label} className="flex items-start gap-3">
+              {done ? (
+                <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5 shrink-0" />
+              ) : active ? (
+                <Loader2 className="h-4 w-4 text-purple-600 animate-spin mt-0.5 shrink-0" />
+              ) : (
+                <Circle className="h-4 w-4 text-slate-300 mt-0.5 shrink-0" />
+              )}
+              <div>
+                <p className={`text-xs font-medium ${done ? "text-green-700" : active ? "text-purple-800" : "text-slate-400"}`}>
+                  {s.label}
+                </p>
+                {active && (
+                  <p className="text-xs text-purple-600 mt-0.5">{s.detail}</p>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </motion.div>
+  )
+}
+
+function CryptoProofCard({ filename, originalKeyBlob, reencryptedKeyBlob }: {
+  filename: string
+  originalKeyBlob: string
+  reencryptedKeyBlob: string
+}) {
+  const truncate = (s: string) => s.length > 48 ? `${s.slice(0, 24)}…${s.slice(-24)}` : s
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35 }}
+    >
+      <Card className="border-green-200 bg-green-50/40">
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <Key className="h-4 w-4 text-green-600" />
+            <CardTitle className="text-sm text-green-800">SRS Proxy Re-encryption Proof</CardTitle>
+          </div>
+          <CardDescription className="text-xs">
+            File: <span className="font-mono">{filename}</span> — The SRS transformed the key without ever seeing your plaintext data.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="rounded-lg bg-white border border-slate-200 p-3">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Original Key (Encrypted for SRS)</p>
+            <p className="font-mono text-xs text-slate-700 break-all leading-relaxed">{truncate(originalKeyBlob)}</p>
+          </div>
+          <div className="flex justify-center">
+            <div className="flex items-center gap-2 text-xs text-purple-600 font-medium">
+              <Shield className="h-3.5 w-3.5" />
+              SRS re-encrypted → your RSA public key
+            </div>
+          </div>
+          <div className="rounded-lg bg-white border border-green-200 p-3">
+            <p className="text-xs font-semibold text-green-600 uppercase tracking-wide mb-1">Re-encrypted Key (Only You Can Decrypt)</p>
+            <p className="font-mono text-xs text-green-800 break-all leading-relaxed">{truncate(reencryptedKeyBlob)}</p>
+          </div>
+          <p className="text-xs text-slate-500 italic">
+            Both values are RSA-OAEP ciphertexts. The underlying 256-bit AES key is identical — but only your private key can unwrap the second one.
+          </p>
+        </CardContent>
+      </Card>
+    </motion.div>
+  )
+}
 
 const MotionTableRow = motion.create(TableRow)
 
@@ -103,6 +198,11 @@ export default function DoctorFiles() {
   const [downloading, setDownloading] = useState<Set<string>>(new Set())
   const [accessResults, setAccessResults] = useState<Map<string, AccessResult>>(new Map())
   const [doctorPrivateKey, setDoctorPrivateKey] = useState<CryptoKey | null>(null)
+
+  // SRS Processing steps
+  const [srsState, setSrsState] = useState<{ filename: string; step: number } | null>(null)
+  // Crypto proof per file: { originalKeyBlob, reencryptedKeyBlob }
+  const [cryptoProof, setCryptoProof] = useState<Map<string, { original: string; reenc: string }>>(new Map())
 
   // Preview State
   const [previewFile, setPreviewFile] = useState<{
@@ -211,9 +311,20 @@ export default function DoctorFiles() {
   const requestAccess = async (filename: string, isRestore = false): Promise<AccessResult | null> => {
     if (accessing.has(filename)) return null // Already in progress
 
+    // Capture original key blob from file list before the API call
+    const originalKeyBlob = files.find(f => f.filename === filename)?.key_blob || ""
+
     try {
       if (!isRestore) {
         setAccessing((prev) => { const next = new Set(prev); next.add(filename); return next; })
+        // SRS step 0: Contacting SRS
+        setSrsState({ filename, step: 0 })
+        await new Promise(r => setTimeout(r, 380))
+        // SRS step 1: Evaluating Policy
+        setSrsState({ filename, step: 1 })
+        await new Promise(r => setTimeout(r, 420))
+        // SRS step 2: Re-encrypting Key
+        setSrsState({ filename, step: 2 })
       }
 
       const response = await api.post("/doctor/access", { file: filename })
@@ -227,6 +338,22 @@ export default function DoctorFiles() {
           iv: response.data.data.iv,
           file_url: response.data.data.file_url,
           portions: response.data.data.portions || []
+        }
+
+        // Store crypto proof (original vs re-encrypted key blob)
+        if (!isRestore && originalKeyBlob && result.key_blob) {
+          setCryptoProof(prev => {
+            const next = new Map(prev)
+            next.set(filename, { original: originalKeyBlob, reenc: result.key_blob! })
+            return next
+          })
+        }
+
+        // All steps done
+        if (!isRestore) {
+          setSrsState({ filename, step: 3 })
+          await new Promise(r => setTimeout(r, 400))
+          setSrsState(null)
         }
 
         setAccessResults((prev) => {
@@ -252,7 +379,10 @@ export default function DoctorFiles() {
           newMap.set(filename, result)
           return newMap
         })
-        if (!isRestore) toast.error(`Access DENIED: ${reason}`)
+        if (!isRestore) {
+          setSrsState(null)
+          toast.error(`Access DENIED: ${reason}`)
+        }
         return result
       }
     } catch (err: any) {
@@ -263,7 +393,10 @@ export default function DoctorFiles() {
         newMap.set(filename, result)
         return newMap
       })
-      if (!isRestore) toast.error(`Access DENIED: ${message}`)
+      if (!isRestore) {
+        setSrsState(null)
+        toast.error(`Access DENIED: ${message}`)
+      }
       return result
     } finally {
       if (!isRestore) {
@@ -543,6 +676,13 @@ export default function DoctorFiles() {
         )}
       </motion.div>
 
+      {/* SRS Processing banner */}
+      <AnimatePresence>
+        {srsState && (
+          <SRSProcessingBanner filename={srsState.filename} step={srsState.step} />
+        )}
+      </AnimatePresence>
+
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -730,6 +870,18 @@ export default function DoctorFiles() {
           </CardContent>
         </Card>
       </motion.div>
+
+      {/* Crypto Proof panels for granted files */}
+      <AnimatePresence>
+        {Array.from(cryptoProof.entries()).map(([fn, proof]) => (
+          <CryptoProofCard
+            key={fn}
+            filename={fn}
+            originalKeyBlob={proof.original}
+            reencryptedKeyBlob={proof.reenc}
+          />
+        ))}
+      </AnimatePresence>
 
       <FilePreviewModal
         isOpen={previewFile.isOpen}

@@ -13,6 +13,7 @@ import DoctorFiles from "@/pages/doctor/DoctorFiles"
 import AdminDashboard from "@/pages/admin/AdminDashboard"
 import AdminAuditLogs from "@/pages/admin/AdminAuditLogs"
 import AdminUsers from "@/pages/admin/AdminUsers"
+import AdminBenchmark from "@/pages/admin/AdminBenchmark"
 import Landing from "@/pages/Landing"
 
 import { Toaster } from "sonner"
@@ -113,6 +114,19 @@ export default function App() {
               <RoleRoute allowedRoles={["admin"]}>
                 <DashboardLayout role={auth.role!} user={auth.userId!}>
                   <AdminUsers />
+                </DashboardLayout>
+              </RoleRoute>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/benchmark"
+          element={
+            <ProtectedRoute>
+              <RoleRoute allowedRoles={["admin"]}>
+                <DashboardLayout role={auth.role!} user={auth.userId!}>
+                  <AdminBenchmark />
                 </DashboardLayout>
               </RoleRoute>
             </ProtectedRoute>
