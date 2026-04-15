@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react"
-import { FileText, Shield, Download, Loader2, ArrowRight, CheckCircle2, XCircle } from "lucide-react"
+import { FileText, Shield, Download, Loader2, ArrowRight, CheckCircle2, XCircle, Key, Tag } from "lucide-react"
 import { motion } from "framer-motion"
 import { useNavigate } from "react-router-dom"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { useAuth } from "@/context/AuthContext"
 import api from "@/services/api"
 
 interface ApiResponse {
@@ -16,6 +17,7 @@ interface ApiResponse {
 
 export default function DoctorDashboard() {
   const navigate = useNavigate()
+  const { attributes, role } = useAuth()
   const [fileCount, setFileCount] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -151,6 +153,61 @@ export default function DoctorDashboard() {
         </motion.div>
       </div>
 
+      {/* My Access Attributes */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.25, duration: 0.4 }}
+      >
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Key className="w-5 h-5 text-blue-600" />
+              My Access Attributes
+            </CardTitle>
+            <CardDescription>
+              These attributes determine which patient records you can access
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {Object.keys(attributes).length === 0 ? (
+              <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <Tag className="w-4 h-4 text-amber-600 shrink-0" />
+                <p className="text-sm text-amber-700">
+                  No attributes assigned yet. Contact an admin to assign your department and speciality.
+                </p>
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {/* Role badge */}
+                {role && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+                    <Key className="w-3 h-3" />
+                    Role: {role.charAt(0).toUpperCase() + role.slice(1)}
+                  </span>
+                )}
+                {Object.entries(attributes).map(([key, value]) => {
+                  const isDept = key.toLowerCase() === "dept"
+                  return (
+                    <span
+                      key={key}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium ${
+                        isDept
+                          ? "bg-green-100 text-green-800"
+                          : "bg-slate-100 text-slate-800"
+                      }`}
+                    >
+                      <Tag className="w-3 h-3" />
+                      {key}: {value}
+                    </span>
+                  )
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </motion.div>
+
       {/* Access Workflow */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -178,7 +235,7 @@ export default function DoctorDashboard() {
                 <div className="flex-1">
                   <p className="font-medium text-slate-900">Browse Available Files</p>
                   <p className="text-sm text-slate-600">
-                    View all encrypted health records stored in the system
+                    See encrypted records in shared storage (metadata only). Who can decrypt still depends on each file&apos;s access policy.
                   </p>
                 </div>
               </motion.div>

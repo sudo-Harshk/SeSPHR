@@ -12,9 +12,9 @@ A patient stores their health record on an **untrusted cloud server** — encryp
 
 **Core security properties implemented:**
 - Patient-centric access control — the patient sets policy, not the hospital
-- PHR partitioning — different portions of a record can have different access policies
 - Proxy re-encryption — SRS transforms the key for the authorised user without exposing plaintext
 - Forward/backward access control — revoke and restore access without re-encrypting files
+- Strict ownership isolation — each patient can only view and manage their own records
 - Tamper-evident audit log — SHA-256 hash chain detects any modification to access records
 
 ---
@@ -35,7 +35,6 @@ See [`docs/architecture.md`](docs/architecture.md) for full Mermaid diagrams cov
 - System entities and data flow
 - PHR upload sequence
 - Access request and re-encryption sequence
-- Granular portions access model
 - Proxy re-encryption key transform
 - Audit log hash chain
 
@@ -56,6 +55,7 @@ Demo accounts are created automatically on first boot:
 | Email | Password | Role | Attributes |
 |---|---|---|---|
 | `patient1@demo.com` | `Demo@1234` | Patient | — |
+| `patient2@demo.com` | `Demo@1234` | Patient | — |
 | `dr_cardio@demo.com` | `Demo@1234` | Doctor | Dept: Cardiology |
 | `dr_ortho@demo.com` | `Demo@1234` | Doctor | Dept: Orthopedics |
 | `admin@demo.com` | `Demo@1234` | Admin | — |
@@ -103,10 +103,10 @@ npm run dev                 # starts Vite at http://localhost:5173
 ## Features
 
 ### Patient
-- Upload PHR files encrypted with AES-256-GCM directly in the browser
-- Define a global access policy (e.g. `Role:Doctor AND Dept:Cardiology`)
-- Split the record into named **portions**, each with its own policy and encryption key
-- Revoke access for a specific user or the entire file
+- Upload PHR files encrypted with AES-256-GCM directly in the browser — plaintext never leaves the device
+- Define an access policy using presets or a custom boolean expression (e.g. `Role:Doctor AND Dept:Cardiology`)
+- Each patient sees only their own records — strict ownership enforcement at the API level
+- Revoke access for a specific doctor or the entire file without re-encrypting
 - Restore access at any time
 
 ### Doctor
@@ -118,8 +118,10 @@ npm run dev                 # starts Vite at http://localhost:5173
 
 ### Admin
 - Manage users and assign attributes (`Role`, `Dept`, `Speciality`, etc.)
-- View the tamper-evident audit log with hash chain integrity verification
-- View performance benchmark charts (encryption, SRS re-encryption, decryption times)
+- View the tamper-evident audit log with SHA-256 hash chain integrity verification
+  - Displays user name, role, and department per entry — no raw UUIDs
+  - Each row shows GRANTED / DENIED with reason (policy mismatch, revoked, not authenticated)
+- View performance benchmark charts (encryption, SRS re-encryption, decryption times vs file size)
 
 ---
 
@@ -163,6 +165,7 @@ sesphr/
 │   │           ├── users.py     # SQLite user + attribute CRUD
 │   │           └── phr.py       # Encrypted PHR file store
 │   ├── seed_demo_users.py       # Creates demo accounts (safe to re-run)
+│   ├── reset_demo.py            # Wipes cloud files and audit log, preserves accounts
 │   └── tests/
 │       └── benchmark_suite.py   # Performance benchmarks
 ├── frontend/

@@ -692,7 +692,8 @@ export default function DoctorFiles() {
           <CardHeader>
             <CardTitle>Files</CardTitle>
             <CardDescription>
-              {files.length} record{files.length === 1 ? "" : "s"} in cloud storage — access is enforced by policy on the server.
+              {files.length} encrypted record{files.length === 1 ? "" : "s"} in cloud storage (all doctors may see this list).
+              Decryption keys are released only when your attributes match each file&apos;s policy on the server.
             </CardDescription>
           </CardHeader>
           <CardContent>

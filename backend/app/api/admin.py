@@ -16,7 +16,7 @@ def api_users():
         return api_error("Unauthorized", 403)
 
     try:
-        users = get_all_users_with_attributes()
+        users = list(get_all_users_with_attributes().values())
         return api_success({"users": users})
     except Exception as e:
         return api_error(f"Failed to load users: {str(e)}", 500)
@@ -71,6 +71,29 @@ def api_audit_logs():
                     logs.append(json.loads(line))
                 except json.JSONDecodeError:
                     continue
+
+        # Enrich user field: resolve UUID → display name + role
+        all_users = get_all_users_with_attributes()
+        user_labels = {}
+        for uid, u in all_users.items():
+            name = u.get("name") or u.get("email", uid)
+            role = u.get("role", "")
+            attrs = u.get("attributes", {})
+            dept = attrs.get("Dept", "")
+            user_labels[uid] = {"display": name, "role": role, "email": u.get("email", ""), "dept": dept}
+
+        for log in logs:
+            uid = log.get("user", "")
+            if uid in user_labels:
+                log["user_display"] = user_labels[uid]["display"]
+                log["user_role"] = user_labels[uid]["role"]
+                log["user_email"] = user_labels[uid]["email"]
+                log["user_dept"] = user_labels[uid]["dept"]
+            else:
+                log["user_display"] = uid  # fallback to raw ID
+                log["user_role"] = ""
+                log["user_email"] = ""
+                log["user_dept"] = ""
 
         ok, detail = verify_audit_log_file(Config.AUDIT_LOG_PATH)
         return api_success({

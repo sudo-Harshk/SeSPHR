@@ -150,7 +150,8 @@ def api_access():
             if has_global_access and key_blob:
                 re_encrypted_global_key = re_encrypt_key(key_blob, session["user_id"])
                 
-            log_event(session["user_id"], filename, "ACCESS", f"GRANTED_GRANULAR (portions: {len(accessible_portions)})")
+            portions_note = f" + {len(accessible_portions)} section(s)" if accessible_portions else ""
+            log_event(session["user_id"], filename, "ACCESS", f"GRANTED{portions_note}")
 
             return api_success({
                 "status": "granted",

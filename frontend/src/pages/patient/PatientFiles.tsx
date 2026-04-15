@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { FileText, Loader2, Upload, Info, ShieldX, Unlock } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import api from "@/services/api"
@@ -22,7 +22,9 @@ import { useAuth } from "@/context/AuthContext"
 import { getSRSKey, generateAESKey, encryptFile, wrapKey } from "@/utils/crypto"
 import FileDetailsDialog from "@/components/FileDetailsDialog"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Badge } from "@/components/ui/badge"
 import SEO from "@/components/SEO"
+import { getUploadPolicyPreview } from "@/utils/policy"
 
 interface FileItem {
   filename: string
@@ -96,10 +98,13 @@ export default function PatientFiles() {
 
   const [uploading, setUploading] = useState(false)
   const [globalPolicy, setGlobalPolicy] = useState("Role:Doctor")
-  const [portions, setPortions] = useState<{ name: string; policy: string }[]>([])
-  const [newPortionName, setNewPortionName] = useState("")
-  const [newPortionPolicy, setNewPortionPolicy] = useState("")
+  /** Latest policy string — updated synchronously so upload never sends a stale preset. */
+  const globalPolicyRef = useRef<string>("Role:Doctor")
 
+  const updateGlobalPolicy = useCallback((value: string) => {
+    globalPolicyRef.current = value
+    setGlobalPolicy(value)
+  }, [])
   // Revoke state
   const [revokeDialog, setRevokeDialog] = useState<{
     open: boolean
@@ -311,30 +316,14 @@ export default function PatientFiles() {
       // 4. Wrap AES Key
       const wrappedKey = await wrapKey(aesKey, srsKey)
 
-      // 5. Handle Granular Portions (Simulate individual encryption for each portion)
-      // In a real system, we'd slice the file, but here we'll just send the metadata
-      // of how we WOULD encrypt the portions to show the backend support.
-      const portionsPayload = await Promise.all(portions.map(async (p) => {
-        const pKey = await generateAESKey()
-        const pWrapped = await wrapKey(pKey, srsKey)
-        // We use the same IV for simplicity in demo, but a real one should be random
-        const pIv = btoa(String.fromCharCode(...window.crypto.getRandomValues(new Uint8Array(12))))
-        return {
-          name: p.name,
-          policy: p.policy,
-          key_blob: pWrapped,
-          iv: pIv
-        }
-      }))
-
-      // 6. Upload
+      // 5. Upload
       const formData = new FormData()
-      // Append encrypted blob with .enc extension to indicate it's encrypted
       formData.append("file", encryptedBlob, `${selectedFile.name}.enc`)
-      formData.append("policy", globalPolicy)
+      const policyToStore = globalPolicyRef.current.trim()
+      formData.append("policy", policyToStore)
       formData.append("key_blob", wrappedKey)
       formData.append("iv", iv)
-      formData.append("portions", JSON.stringify(portionsPayload))
+      formData.append("portions", JSON.stringify([]))
 
       const response = await api.post<UploadResponse>("/patient/upload", formData, {
         headers: {
@@ -584,7 +573,7 @@ export default function PatientFiles() {
           <CardHeader>
             <CardTitle>Upload Health Record</CardTitle>
             <CardDescription>
-              Upload a file and specify an access policy
+              Upload ciphertext only. Who can <strong>decrypt</strong> is controlled by the access policy below.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -610,66 +599,97 @@ export default function PatientFiles() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium">Global Access Policy</label>
+                <label className="text-sm font-medium">
+                  File Access Policy
+                  <span className="ml-1 text-red-500">*</span>
+                </label>
+                <p className="text-xs text-slate-500">
+                  Only users whose attributes match this policy receive decryption keys. Use a preset or type a custom expression.
+                </p>
+                {/* Quick presets */}
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    { label: "All Doctors", value: "Role:Doctor" },
+                    { label: "Cardiology only", value: "Role:Doctor AND Dept:Cardiology" },
+                    { label: "Orthopedics only", value: "Role:Doctor AND Dept:Orthopedics" },
+                  ].map((preset) => (
+                    <button
+                      key={preset.value}
+                      type="button"
+                      onClick={() => updateGlobalPolicy(preset.value)}
+                      className={`px-2 py-1 rounded text-xs border transition-colors ${
+                        globalPolicy === preset.value
+                          ? "bg-blue-600 text-white border-blue-600"
+                          : "bg-white text-slate-700 border-slate-300 hover:border-blue-400"
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
                 <Input
                   value={globalPolicy}
-                  onChange={(e) => setGlobalPolicy(e.target.value)}
-                  placeholder="e.g. Role:Doctor"
+                  onChange={(e) => updateGlobalPolicy(e.target.value)}
+                  placeholder="e.g. Role:Doctor AND Dept:Cardiology"
                 />
-              </div>
-
-              <div className="space-y-3 p-4 border rounded-lg bg-slate-50/50">
-                <label className="text-sm font-semibold flex items-center gap-2">
-                  <Info className="h-4 w-4 text-blue-500" />
-                  Granular Access (Portions)
-                </label>
-                <p className="text-xs text-slate-500">Define specific access rules for parts of this record (e.g. Lab Results).</p>
-
-                <div className="flex gap-2">
-                  <Input
-                    className="flex-1"
-                    placeholder="Field Name (e.g. Lab Results)"
-                    value={newPortionName}
-                    onChange={(e) => setNewPortionName(e.target.value)}
-                  />
-                  <Input
-                    className="flex-1"
-                    placeholder="Policy (e.g. Dept:Cardiology)"
-                    value={newPortionPolicy}
-                    onChange={(e) => setNewPortionPolicy(e.target.value)}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      if (newPortionName && newPortionPolicy) {
-                        setPortions([...portions, { name: newPortionName, policy: newPortionPolicy }])
-                        setNewPortionName("")
-                        setNewPortionPolicy("")
-                      }
-                    }}
-                  >
-                    Add
-                  </Button>
-                </div>
-
-                {portions.length > 0 && (
-                  <div className="space-y-2 mt-2">
-                    {portions.map((p, i) => (
-                      <div key={i} className="flex items-center justify-between text-sm bg-white p-2 rounded border">
-                        <span><strong>{p.name}</strong>: {p.policy}</span>
-                        <button
-                          type="button"
-                          className="text-red-500 hover:text-red-700"
-                          onClick={() => setPortions(portions.filter((_, idx) => idx !== i))}
-                        >
-                          Remove
-                        </button>
+                {/* Live access preview */}
+                {(() => {
+                  const preview = getUploadPolicyPreview(globalPolicy)
+                  const isDept = preview.kind === "department"
+                  const isAllDocs = preview.kind === "all_doctors"
+                  return (
+                    <div
+                      className={`flex flex-col gap-2 px-3 py-2 rounded-md text-xs border ${
+                        isDept
+                          ? "bg-green-50 border-green-200 text-green-900"
+                          : isAllDocs
+                            ? "bg-amber-50 border-amber-200 text-amber-900"
+                            : "bg-slate-50 border-slate-200 text-slate-800"
+                      }`}
+                    >
+                      <div className="flex items-start gap-2">
+                        <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                        <div className="space-y-1">
+                          {preview.kind === "department" && (
+                            <>
+                              <p className="font-semibold">
+                                Decryptable only by: doctors in {preview.department}
+                              </p>
+                              <p className="text-[11px] opacity-90">
+                                Other departments will not receive keys for this file (unless a matching section-level policy applies).
+                              </p>
+                            </>
+                          )}
+                          {preview.kind === "all_doctors" && (
+                            <>
+                              <p className="font-semibold flex flex-wrap items-center gap-2">
+                                Decryptable by: all doctors
+                                <Badge variant="outline" className="text-[10px] border-amber-300 bg-amber-100/80 text-amber-900">
+                                  All departments
+                                </Badge>
+                              </p>
+                              <p className="text-[11px] opacity-90">
+                                Any doctor account whose attributes satisfy <code className="px-0.5 bg-white/70 rounded">Role:Doctor</code> can request decryption keys.
+                              </p>
+                            </>
+                          )}
+                          {preview.kind === "admin" && (
+                            <p className="font-semibold">Decryptable only by users matching Role:Admin.</p>
+                          )}
+                          {preview.kind === "custom" && (
+                            <p>
+                              <span className="font-semibold">Custom policy.</span>{" "}
+                              Only users whose attributes match this expression receive keys:{" "}
+                              <code className="bg-white/80 px-1 rounded break-all">{globalPolicy.trim() || "—"}</code>
+                            </p>
+                          )}
+                        </div>
                       </div>
-                    ))}
-                  </div>
-                )}
+                    </div>
+                  )
+                })()}
               </div>
+
 
               <Button
                 type="submit"
@@ -779,7 +799,8 @@ export default function PatientFiles() {
                               initial={{ scale: 0.8, opacity: 0 }}
                               animate={{ scale: 1, opacity: 1 }}
                               transition={{ duration: 0.3, type: "spring", stiffness: 300 }}
-                              className={`px-2 py-1 rounded-md text-xs font-medium ${isFullRevoked
+                              title={file.policy || undefined}
+                              className={`px-2 py-1 rounded-md text-xs font-medium truncate max-w-[140px] block ${isFullRevoked
                                 ? "bg-red-50 text-red-700 border border-red-200"
                                 : "bg-blue-50 text-blue-700 border border-blue-200"
                                 }`}
@@ -788,9 +809,7 @@ export default function PatientFiles() {
                                 ? "Revoked (all)"
                                 : blockedUsers > 0
                                   ? `${blockedUsers} blocked`
-                                  : file.policy?.includes("Doctor")
-                                    ? "Doctor"
-                                    : file.policy || "N/A"}
+                                  : file.policy || "N/A"}
                             </motion.span>
                           </TableCell>
                           <TableCell className="text-slate-600">

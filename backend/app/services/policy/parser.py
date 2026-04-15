@@ -1,5 +1,6 @@
 import re
 
+
 def parse_policy(policy_str):
     """
     Parses a policy string into a format that can be evaluated.
@@ -10,44 +11,49 @@ def parse_policy(policy_str):
     return policy_str
 
 
+def _normalize_policy_input(policy_str):
+    """Trim and collapse whitespace so policies are resilient to extra spaces."""
+    if not policy_str:
+        return policy_str
+    s = policy_str.strip()
+    s = re.sub(r"\s+", " ", s)
+    return s
+
+
 def evaluate_policy(user, policy_str):
     """
     Evaluates the policy string against the user's attributes.
-    Supports AND, OR, and parentheses.
+    Supports AND, OR, and parentheses (case-insensitive AND/OR after attribute substitution).
     """
     if not policy_str or policy_str == "N/A":
         return True
 
+    policy_str = _normalize_policy_input(policy_str)
+
     # Replace "Key:Value" with True/False based on user attributes
-    # We use a regex to find all Attribute:Value pairs
     def replace_rule(match):
         rule = match.group(0)
         if ":" not in rule:
             return rule
-        
+
         attr, val = rule.split(":", 1)
         attr = attr.strip()
         val = val.strip()
-        
+
         user_val = str(user.attributes.get(attr, ""))
         return "True" if user_val == val else "False"
 
-    # 1. Identify all "Attr:Val" patterns
-    # This regex looks for alphanumeric chars followed by a colon and then more alphanumeric chars
-    # It also handles simple values like True/False
-    processed_policy = re.sub(r'[\w-]+:[\w-]+', replace_rule, policy_str)
+    processed_policy = re.sub(r"[\w-]+:[\w-]+", replace_rule, policy_str)
+    # Normalize logical operators (case-insensitive word boundaries)
+    processed_policy = re.sub(r"(?i)\band\b", "and", processed_policy)
+    processed_policy = re.sub(r"(?i)\bor\b", "or", processed_policy)
+    processed_policy = re.sub(r"\s+", " ", processed_policy.strip())
 
-    # 2. Normalize logical operators to Python equivalents
-    processed_policy = processed_policy.replace("AND", "and").replace("OR", "or")
-
-    # 3. Security check: Only allow 'True', 'False', 'and', 'or', '(', ')'
-    if not re.match(r'^[TrueFalseandor\s\(\)]+$', processed_policy):
-        # If it contains anything else, it's potentially unsafe or malformed
-        # Fallback to simple check if regex fails or just return False
+    # Security check: Only allow 'True', 'False', 'and', 'or', '(', ')', whitespace
+    if not re.match(r"^[TrueFalseandor\s\(\)]+$", processed_policy):
         return False
 
     try:
-        # Safe eval of boolean expression
         return eval(processed_policy, {"__builtins__": None}, {})
     except Exception:
         return False

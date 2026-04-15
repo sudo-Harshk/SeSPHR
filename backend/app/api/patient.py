@@ -41,6 +41,10 @@ def api_files():
                 if not owner and "test_patient" in meta_filename:
                      owner = "test_patient_mod2"
 
+                # Only show files owned by the current patient
+                if owner != session["user_id"]:
+                    continue
+
                 # Get modification time and size
                 file_path = Config.CLOUD_DATA / meta.get("file", meta_filename.replace(".json", ".enc"))
                 mtime = 0

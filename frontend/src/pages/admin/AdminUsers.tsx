@@ -26,6 +26,8 @@ import api from "@/services/api"
 
 interface User {
   user_id: string
+  email: string | null
+  name: string | null
   role: string | null
   attributes: Record<string, string>
 }
@@ -201,7 +203,7 @@ export default function AdminUsers() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>User ID</TableHead>
+                      <TableHead>User</TableHead>
                       <TableHead>Role</TableHead>
                       <TableHead>Attributes</TableHead>
                     </TableRow>
@@ -216,8 +218,14 @@ export default function AdminUsers() {
                         className="border-b"
                       >
                         <TableCell className="font-medium">
-                          <div className="flex flex-col">
-                            <span className="text-xs text-slate-400">{user.user_id}</span>
+                          <div className="flex flex-col gap-0.5">
+                            {user.name && (
+                              <span className="text-sm font-semibold text-slate-900">{user.name}</span>
+                            )}
+                            {user.email && (
+                              <span className="text-xs text-slate-600">{user.email}</span>
+                            )}
+                            <span className="text-xs text-slate-400 font-mono">{user.user_id}</span>
                           </div>
                         </TableCell>
                         <TableCell>
@@ -320,10 +328,13 @@ export default function AdminUsers() {
               >
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-lg">{user.user_id}</CardTitle>
-                    <CardDescription>
-                      {Object.keys(user.attributes).length} attribute
-                      {Object.keys(user.attributes).length !== 1 ? "s" : ""}
+                    <CardTitle className="text-lg">{user.name || user.email || user.user_id}</CardTitle>
+                    <CardDescription className="space-y-0.5">
+                      {user.email && <div className="text-xs">{user.email}</div>}
+                      <div>
+                        {Object.keys(user.attributes).length} attribute
+                        {Object.keys(user.attributes).length !== 1 ? "s" : ""}
+                      </div>
                     </CardDescription>
                   </CardHeader>
                   <CardContent>

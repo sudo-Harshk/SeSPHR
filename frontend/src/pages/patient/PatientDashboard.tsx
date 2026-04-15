@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react"
-import { FileText, Upload, Shield, Loader2, ArrowRight } from "lucide-react"
+import { FileText, Upload, Shield, Loader2, ArrowRight, Key, Tag } from "lucide-react"
 import { motion } from "framer-motion"
 import { useNavigate } from "react-router-dom"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { useAuth } from "@/context/AuthContext"
 import api from "@/services/api"
 
 interface ApiResponse {
@@ -16,6 +17,7 @@ interface ApiResponse {
 
 export default function PatientDashboard() {
   const navigate = useNavigate()
+  const { attributes, role } = useAuth()
   const [fileCount, setFileCount] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -151,6 +153,53 @@ export default function PatientDashboard() {
           </Card>
         </motion.div>
       </div>
+
+      {/* My Access Attributes */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.25, duration: 0.4 }}
+      >
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Key className="w-5 h-5 text-blue-600" />
+              My Access Attributes
+            </CardTitle>
+            <CardDescription>
+              Attributes assigned to your account by the admin
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {Object.keys(attributes).length === 0 ? (
+              <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <Tag className="w-4 h-4 text-amber-600 shrink-0" />
+                <p className="text-sm text-amber-700">
+                  No attributes assigned yet. Contact an admin if you expect to have additional attributes.
+                </p>
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {role && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-green-100 text-green-800">
+                    <Key className="w-3 h-3" />
+                    Role: {role.charAt(0).toUpperCase() + role.slice(1)}
+                  </span>
+                )}
+                {Object.entries(attributes).map(([key, value]) => (
+                  <span
+                    key={key}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-slate-100 text-slate-800"
+                  >
+                    <Tag className="w-3 h-3" />
+                    {key}: {value}
+                  </span>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </motion.div>
 
       {/* Quick Actions */}
       <motion.div

@@ -3,6 +3,7 @@ Demo seed script — creates pre-configured accounts for the live demo.
 
 Accounts created:
   patient1@demo.com   / Demo@1234   (role: patient)
+  patient2@demo.com   / Demo@1234   (role: patient)
   dr_cardio@demo.com  / Demo@1234   (role: doctor, Dept: Cardiology)
   dr_ortho@demo.com   / Demo@1234   (role: doctor, Dept: Orthopedics)
   admin@demo.com      / Demo@1234   (role: admin)
@@ -23,10 +24,11 @@ from config import Config
 PASSWORD = "Demo@1234"
 
 USERS = [
-    {"email": "patient1@demo.com",  "name": "Alice Patient",   "role": "patient",  "attributes": {}},
-    {"email": "dr_cardio@demo.com", "name": "Dr. Raj Cardio",  "role": "doctor",   "attributes": {"Dept": "Cardiology", "Speciality": "Cardiac"}},
-    {"email": "dr_ortho@demo.com",  "name": "Dr. Priya Ortho", "role": "doctor",   "attributes": {"Dept": "Orthopedics"}},
-    {"email": "admin@demo.com",     "name": "System Admin",    "role": "admin",    "attributes": {}},
+    {"email": "patient1@demo.com",  "name": "Alice (Patient 1)", "role": "patient",  "attributes": {}},
+    {"email": "patient2@demo.com",  "name": "Bob (Patient 2)",   "role": "patient",  "attributes": {}},
+    {"email": "dr_cardio@demo.com", "name": "Dr. Raj Cardio",    "role": "doctor",   "attributes": {"Dept": "Cardiology", "Speciality": "Cardiac"}},
+    {"email": "dr_ortho@demo.com",  "name": "Dr. Priya Ortho",   "role": "doctor",   "attributes": {"Dept": "Orthopedics"}},
+    {"email": "admin@demo.com",     "name": "System Admin",      "role": "admin",    "attributes": {}},
 ]
 
 def seed():
