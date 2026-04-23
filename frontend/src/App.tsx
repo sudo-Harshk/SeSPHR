@@ -14,6 +14,7 @@ import AdminDashboard from "@/pages/admin/AdminDashboard"
 import AdminAuditLogs from "@/pages/admin/AdminAuditLogs"
 import AdminUsers from "@/pages/admin/AdminUsers"
 import AdminBenchmark from "@/pages/admin/AdminBenchmark"
+import AdminCloudView from "@/pages/admin/AdminCloudView"
 import Landing from "@/pages/Landing"
 
 import { Toaster } from "sonner"
@@ -127,6 +128,19 @@ export default function App() {
               <RoleRoute allowedRoles={["admin"]}>
                 <DashboardLayout role={auth.role!} user={auth.userId!}>
                   <AdminBenchmark />
+                </DashboardLayout>
+              </RoleRoute>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/cloud"
+          element={
+            <ProtectedRoute>
+              <RoleRoute allowedRoles={["admin"]}>
+                <DashboardLayout role={auth.role!} user={auth.userId!}>
+                  <AdminCloudView />
                 </DashboardLayout>
               </RoleRoute>
             </ProtectedRoute>

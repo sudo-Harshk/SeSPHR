@@ -70,46 +70,116 @@ function SRSProcessingBanner({ filename, step }: { filename: string; step: numbe
   )
 }
 
-function CryptoProofCard({ filename, originalKeyBlob, reencryptedKeyBlob }: {
+function PREProofCard({ filename, originalKeyBlob, reencryptedKeyBlob, fileSize, debugInfo }: {
   filename: string
   originalKeyBlob: string
   reencryptedKeyBlob: string
+  fileSize?: number
+  debugInfo?: DebugInfo
 }) {
   const truncate = (s: string) => s.length > 48 ? `${s.slice(0, 24)}…${s.slice(-24)}` : s
+  const fmt = (n: number | null | undefined) => n != null ? `${n} ms` : "in browser"
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35 }}
+      className="grid grid-cols-1 lg:grid-cols-2 gap-4"
     >
-      <Card className="border-green-200 bg-green-50/40">
+      {/* Access Flow Panel */}
+      <Card className="border-purple-200 bg-purple-50/30">
         <CardHeader className="pb-3">
           <div className="flex items-center gap-2">
-            <Key className="h-4 w-4 text-green-600" />
-            <CardTitle className="text-sm text-green-800">SRS Proxy Re-encryption Proof</CardTitle>
+            <Shield className="h-4 w-4 text-purple-600" />
+            <CardTitle className="text-sm text-purple-800">PRE Access Flow Proof</CardTitle>
           </div>
           <CardDescription className="text-xs">
-            File: <span className="font-mono">{filename}</span> — The SRS transformed the key without ever seeing your plaintext data.
+            File: <span className="font-mono">{filename}</span>
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
+          {debugInfo && (
+            <>
+              <div className="rounded-lg bg-white border border-slate-200 px-3 py-2">
+                <p className="text-[10px] text-slate-400 uppercase tracking-wide mb-1">Policy Checked</p>
+                <p className="font-mono text-xs text-slate-700">{debugInfo.policy}</p>
+              </div>
+
+              <div className="space-y-1.5">
+                {debugInfo.steps.map((step, i) => (
+                  <div key={i} className="flex items-center justify-between rounded-md bg-white border border-slate-100 px-3 py-1.5">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
+                      <span className="text-xs text-slate-700">{step.label}</span>
+                    </div>
+                    <span className="font-mono text-xs text-purple-600 font-semibold">{fmt(step.duration_ms)}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="rounded-md bg-purple-100 border border-purple-200 px-3 py-2 text-xs text-purple-800">
+                <span className="font-semibold">Key Before (SRS): </span>
+                <span className="font-mono">{debugInfo.key_blob_srs}</span>
+                <br />
+                <span className="font-semibold">Key After (Doctor): </span>
+                <span className="font-mono">{debugInfo.key_blob_doctor}</span>
+              </div>
+
+              <p className="text-xs text-slate-500 font-medium">{debugInfo.note}</p>
+              <p className="text-xs text-slate-500 italic">Decryption happens only in browser.</p>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Key Flow Panel */}
+      <Card className="border-green-200 bg-green-50/30">
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <Key className="h-4 w-4 text-green-600" />
+            <CardTitle className="text-sm text-green-800">Key Flow Panel</CardTitle>
+          </div>
+          <CardDescription className="text-xs">
+            Only the 32-byte AES key changes. The file is never touched by SRS.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="rounded-lg bg-slate-900 border border-slate-700 px-3 py-2">
+            <p className="text-[10px] text-slate-400 uppercase tracking-wide mb-1">AES Key</p>
+            <p className="font-mono text-xs text-amber-400">[masked — never leaves browser]</p>
+          </div>
+
           <div className="rounded-lg bg-white border border-slate-200 p-3">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Original Key (Encrypted for SRS)</p>
-            <p className="font-mono text-xs text-slate-700 break-all leading-relaxed">{truncate(originalKeyBlob)}</p>
+            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Key Blob (SRS-encrypted)</p>
+            <p className="font-mono text-xs text-slate-600 break-all">{truncate(originalKeyBlob)}</p>
           </div>
+
           <div className="flex justify-center">
-            <div className="flex items-center gap-2 text-xs text-purple-600 font-medium">
-              <Shield className="h-3.5 w-3.5" />
-              SRS re-encrypted → your RSA public key
-            </div>
+            <span className="text-xs text-purple-600 font-medium bg-purple-50 border border-purple-200 px-3 py-1 rounded-full">
+              SRS re-encrypts → your RSA public key
+            </span>
           </div>
+
           <div className="rounded-lg bg-white border border-green-200 p-3">
-            <p className="text-xs font-semibold text-green-600 uppercase tracking-wide mb-1">Re-encrypted Key (Only You Can Decrypt)</p>
-            <p className="font-mono text-xs text-green-800 break-all leading-relaxed">{truncate(reencryptedKeyBlob)}</p>
+            <p className="text-[10px] font-semibold text-green-600 uppercase tracking-wide mb-1">Key Blob (Doctor-encrypted)</p>
+            <p className="font-mono text-xs text-green-800 break-all">{truncate(reencryptedKeyBlob)}</p>
           </div>
-          <p className="text-xs text-slate-500 italic">
-            Both values are RSA-OAEP ciphertexts. The underlying 256-bit AES key is identical — but only your private key can unwrap the second one.
-          </p>
+
+          {fileSize != null && (
+            <div className="rounded-lg bg-blue-50 border border-blue-200 px-3 py-2 flex items-center justify-between">
+              <span className="text-xs text-blue-700 font-medium">File size before → after SRS:</span>
+              <span className="font-mono text-xs text-blue-900 font-bold">
+                {formatBytes(fileSize)} → {formatBytes(fileSize)}
+              </span>
+            </div>
+          )}
+
+          <div className="rounded-md bg-green-100 border border-green-300 px-3 py-2">
+            <p className="text-xs text-green-900 font-bold">
+              Only 32-byte AES key changes. File remains unchanged.
+            </p>
+          </div>
         </CardContent>
       </Card>
     </motion.div>
@@ -139,6 +209,19 @@ interface ApiResponse {
   error: string | null
 }
 
+interface DebugStep {
+  label: string
+  duration_ms: number | null
+}
+
+interface DebugInfo {
+  policy: string
+  key_blob_srs: string
+  key_blob_doctor: string
+  steps: DebugStep[]
+  note: string
+}
+
 interface AccessResult {
   filename: string
   status: "granted" | "denied" | null
@@ -150,6 +233,7 @@ interface AccessResult {
     key_blob: string
     iv: string
   }[]
+  debug?: DebugInfo
 }
 
 const formatBytes = (bytes: number, decimals = 2) => {
@@ -337,7 +421,8 @@ export default function DoctorFiles() {
           key_blob: response.data.data.key_blob,
           iv: response.data.data.iv,
           file_url: response.data.data.file_url,
-          portions: response.data.data.portions || []
+          portions: response.data.data.portions || [],
+          debug: response.data.data.debug,
         }
 
         // Store crypto proof (original vs re-encrypted key blob)
@@ -872,16 +957,22 @@ export default function DoctorFiles() {
         </Card>
       </motion.div>
 
-      {/* Crypto Proof panels for granted files */}
+      {/* PRE Proof + Key Flow panels for granted files */}
       <AnimatePresence>
-        {Array.from(cryptoProof.entries()).map(([fn, proof]) => (
-          <CryptoProofCard
-            key={fn}
-            filename={fn}
-            originalKeyBlob={proof.original}
-            reencryptedKeyBlob={proof.reenc}
-          />
-        ))}
+        {Array.from(cryptoProof.entries()).map(([fn, proof]) => {
+          const fileSize = files.find(f => f.filename === fn)?.size
+          const accessResult = accessResults.get(fn)
+          return (
+            <PREProofCard
+              key={fn}
+              filename={fn}
+              originalKeyBlob={proof.original}
+              reencryptedKeyBlob={proof.reenc}
+              fileSize={fileSize}
+              debugInfo={accessResult?.debug}
+            />
+          )
+        })}
       </AnimatePresence>
 
       <FilePreviewModal

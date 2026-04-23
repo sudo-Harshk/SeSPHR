@@ -101,6 +101,8 @@ export default function AdminAuditLogs() {
   const [loading, setLoading] = useState(true)
   const [integrityStatus, setIntegrityStatus] = useState<IntegrityStatus>("verifying")
   const [integrityDetail, setIntegrityDetail] = useState<string>("")
+  const [tamperedBlock, setTamperedBlock] = useState<number | null>(null)
+  const [totalBlocks, setTotalBlocks] = useState<number>(0)
 
   useEffect(() => { fetchLogs() }, [])
 
@@ -108,24 +110,34 @@ export default function AdminAuditLogs() {
     try {
       setLoading(true)
       setIntegrityStatus("verifying")
-      const response = await api.get("/admin/audit")
-      if (response.data.success && response.data.data) {
-        const data = response.data.data as {
+      setTamperedBlock(null)
+
+      const [auditRes, verifyRes] = await Promise.all([
+        api.get("/admin/audit"),
+        api.get("/admin/audit/verify").catch(() => null),
+      ])
+
+      if (auditRes.data.success && auditRes.data.data) {
+        const data = auditRes.data.data as {
           logs: AuditLog[]
           integrity?: { valid: boolean; detail?: string }
         }
-        const fetchedLogs = data.logs ?? []
-        const integrity = data.integrity
-        if (integrity) {
-          setIntegrityStatus(integrity.valid ? "valid" : "tampered")
-          setIntegrityDetail(integrity.detail?.trim() || "")
-        } else {
-          setIntegrityStatus("valid")
-          setIntegrityDetail("")
-        }
-        setLogs([...fetchedLogs].sort((a, b) => b.timestamp - a.timestamp))
+        setLogs([...(data.logs ?? [])].sort((a, b) => b.timestamp - a.timestamp))
       } else {
         setLogs([])
+      }
+
+      if (verifyRes?.data?.success) {
+        const v = verifyRes.data.data
+        setIntegrityStatus(v.valid ? "valid" : "tampered")
+        setIntegrityDetail(v.detail?.trim() || "")
+        setTamperedBlock(v.block_number ?? null)
+        setTotalBlocks(v.total_blocks ?? 0)
+      } else if (auditRes.data.data?.integrity) {
+        const i = auditRes.data.data.integrity
+        setIntegrityStatus(i.valid ? "valid" : "tampered")
+        setIntegrityDetail(i.detail?.trim() || "")
+      } else {
         setIntegrityStatus("valid")
         setIntegrityDetail("")
       }
@@ -158,33 +170,68 @@ export default function AdminAuditLogs() {
         </Button>
       </div>
 
-      {/* Integrity Banner */}
+      {/* Prominent Tamper Detection Badge */}
+      <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.3 }}>
+        {integrityStatus === "verifying" && (
+          <div className="flex items-center gap-4 rounded-xl border border-blue-200 bg-blue-50 px-6 py-5">
+            <Loader2 className="h-8 w-8 animate-spin text-blue-500 shrink-0" />
+            <div>
+              <p className="text-lg font-bold text-blue-900">Checking hash chain…</p>
+              <p className="text-sm text-blue-700">Running SHA-256 chain verification on all {totalBlocks || "?"} blocks.</p>
+            </div>
+          </div>
+        )}
+        {integrityStatus === "valid" && (
+          <div className="flex items-center gap-4 rounded-xl border-2 border-green-400 bg-green-50 px-6 py-5">
+            <ShieldCheck className="h-10 w-10 text-green-600 shrink-0" />
+            <div>
+              <p className="text-xl font-bold text-green-800">
+                TAMPER DETECTION ACTIVE — All {totalBlocks || logs.length} blocks verified
+              </p>
+              <p className="text-sm text-green-700 mt-0.5">
+                SHA-256 hash chain is unbroken. Every entry links to the previous. No block has been inserted, removed, or modified.
+              </p>
+            </div>
+          </div>
+        )}
+        {integrityStatus === "tampered" && (
+          <div className="flex items-center gap-4 rounded-xl border-2 border-red-500 bg-red-50 px-6 py-5">
+            <ShieldAlert className="h-10 w-10 text-red-600 shrink-0 animate-pulse" />
+            <div>
+              <p className="text-xl font-bold text-red-800">
+                TAMPER DETECTED{tamperedBlock ? ` — Modified at block #${tamperedBlock}` : ""}
+              </p>
+              <p className="text-sm text-red-700 mt-0.5">
+                {integrityDetail || "The audit log has been edited or corrupted. The hash chain is broken."}
+              </p>
+              {tamperedBlock && (
+                <p className="text-xs text-red-600 mt-1 font-mono">
+                  Hash chain break at block #{tamperedBlock} · All entries after this point are unverifiable
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+      </motion.div>
+
+      {/* Secondary integrity detail card */}
       <Card className={`border-l-4 ${
         integrityStatus === "valid" ? "border-l-green-500" :
         integrityStatus === "tampered" ? "border-l-red-500" : "border-l-blue-500"
       }`}>
-        <CardContent className="pt-5 pb-4 flex items-center gap-4">
-          {integrityStatus === "verifying" && <>
-            <Loader2 className="h-6 w-6 animate-spin text-blue-500 shrink-0" />
-            <div>
-              <p className="font-semibold">Verifying log integrity…</p>
-              <p className="text-sm text-muted-foreground">Running SHA-256 hash chain check on the server.</p>
-            </div>
-          </>}
-          {integrityStatus === "valid" && <>
-            <ShieldCheck className="h-6 w-6 text-green-600 shrink-0" />
-            <div>
-              <p className="font-semibold text-green-700">All {logs.length} entries verified — log is intact</p>
-              <p className="text-sm text-muted-foreground">SHA-256 hash chain is unbroken. No entries have been added, removed, or modified.</p>
-            </div>
-          </>}
-          {integrityStatus === "tampered" && <>
-            <ShieldAlert className="h-6 w-6 text-red-600 shrink-0" />
-            <div>
-              <p className="font-semibold text-red-700">Integrity violation detected</p>
-              <p className="text-sm text-muted-foreground">{integrityDetail || "The audit file may have been edited or truncated."}</p>
-            </div>
-          </>}
+        <CardContent className="pt-4 pb-3 flex items-center gap-3 text-sm">
+          {integrityStatus === "valid" && (
+            <><Check className="h-4 w-4 text-green-600 shrink-0" />
+            <span className="text-green-700">Each log entry includes a <code className="text-xs bg-green-100 px-1 rounded">prev_hash</code> and <code className="text-xs bg-green-100 px-1 rounded">hash</code> field. Verification re-computes SHA-256 of every entry body and checks the chain.</span></>
+          )}
+          {integrityStatus === "tampered" && (
+            <><ShieldAlert className="h-4 w-4 text-red-600 shrink-0" />
+            <span className="text-red-700">{integrityDetail || "Hash chain broken — audit file may have been edited."}</span></>
+          )}
+          {integrityStatus === "verifying" && (
+            <><Loader2 className="h-4 w-4 animate-spin text-blue-500 shrink-0" />
+            <span className="text-blue-700">Verifying SHA-256 hash chain integrity…</span></>
+          )}
         </CardContent>
       </Card>
 

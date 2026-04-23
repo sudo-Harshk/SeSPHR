@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Shield, FileSearch, CheckCircle2, XCircle, Loader2, ArrowRight, AlertTriangle, Users, Trash2 } from "lucide-react"
+import { Shield, FileSearch, CheckCircle2, XCircle, Loader2, ArrowRight, Users, Trash2, Cloud, ShieldCheck, ShieldX } from "lucide-react"
 import { motion } from "framer-motion"
 import { useNavigate } from "react-router-dom"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import api from "@/services/api"
 import ConfirmDialog from "@/components/ConfirmDialog"
 import { toast } from "sonner"
+import { ArchitectureDiagram } from "@/components/ArchitectureDiagram"
 
 interface AuditLogEntry {
   timestamp: number
@@ -339,24 +340,94 @@ export default function AdminDashboard() {
         onCancel={() => !clearingUploads && setClearUploadsOpen(false)}
       />
 
-      {/* Info Card */}
+      {/* Threat Model Box */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.5, duration: 0.4 }}
       >
-        <Card className="border-blue-200 bg-blue-50">
-          <CardHeader>
+        <Card className="border-slate-300">
+          <CardHeader className="pb-3">
             <div className="flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-blue-600" />
-              <CardTitle className="text-blue-900">About Audit Logs</CardTitle>
+              <Shield className="w-5 h-5 text-slate-700" />
+              <CardTitle className="text-slate-900">Threat Model</CardTitle>
             </div>
+            <CardDescription>
+              What this system protects — and what it does not.
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-blue-800">
-              The audit log system maintains a tamper-evident hash chain. Each log entry includes a cryptographic hash 
-              that links it to the previous entry, making any unauthorized modifications immediately detectable. 
-              All access attempts, grants, and denials are logged with full traceability.
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="space-y-2">
+                {[
+                  "Untrusted cloud storage",
+                  "Data breach at cloud provider",
+                ].map((item) => (
+                  <div key={item} className="flex items-center gap-3 rounded-md bg-green-50 border border-green-200 px-3 py-2">
+                    <ShieldCheck className="h-4 w-4 text-green-600 shrink-0" />
+                    <span className="text-sm text-green-800">
+                      <span className="font-semibold">{item}</span>
+                      <span className="text-green-700"> → Protected</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div className="space-y-2">
+                {[
+                  { threat: "Malicious SRS", reason: "SRS sees AES key in memory (trusted assumption)" },
+                  { threat: "Network attacker (no TLS)", reason: "Transport security is a separate concern" },
+                ].map((item) => (
+                  <div key={item.threat} className="flex items-start gap-3 rounded-md bg-red-50 border border-red-200 px-3 py-2">
+                    <ShieldX className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="text-sm font-semibold text-red-800">{item.threat}</span>
+                      <span className="text-sm text-red-600"> → Not protected</span>
+                      <p className="text-xs text-red-500 mt-0.5">{item.reason}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="mt-4 rounded-lg bg-slate-900 text-white px-4 py-3 text-sm font-medium">
+              To read data, an attacker must compromise <span className="text-amber-400 font-bold">BOTH Cloud AND SRS simultaneously.</span>
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
+
+      {/* Architecture Diagram */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.6, duration: 0.4 }}
+      >
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <Cloud className="w-5 h-5 text-blue-600" />
+              <CardTitle>System Architecture</CardTitle>
+            </div>
+            <CardDescription>
+              Trust levels: Browser (Trusted) → SRS (Semi-trusted, sees AES key in memory) → Cloud (Untrusted, sees only ciphertext)
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="mb-3 flex flex-wrap gap-3 text-xs">
+              <span className="rounded-full border border-green-300 bg-green-50 px-3 py-1 text-green-800 font-medium">
+                Browser: Trusted — encrypt/decrypt happens here
+              </span>
+              <span className="rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-amber-800 font-medium">
+                SRS: Semi-trusted — sees AES key in memory (trusted assumption)
+              </span>
+              <span className="rounded-full border border-red-300 bg-red-50 px-3 py-1 text-red-800 font-medium">
+                Cloud: Untrusted — sees only ciphertext
+              </span>
+            </div>
+            <div className="rounded-lg border bg-slate-50 p-4">
+              <ArchitectureDiagram />
+            </div>
+            <p className="mt-2 text-center text-xs text-slate-500 font-medium">
+              Decryption happens only in browser — ciphertext never leaves the cloud unencrypted.
             </p>
           </CardContent>
         </Card>
