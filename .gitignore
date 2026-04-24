@@ -1,21 +1,30 @@
-# --- Global Security Rules (CRITICAL) ---
-# Block all cryptographic keys
+# =========================================================
+# 🔐 GLOBAL SECURITY (CRITICAL)
+# =========================================================
+
+# Cryptographic keys
 *.pem
 *.key
 *.p12
 *.pfx
 
-# Block all encrypted data files
+# Encrypted data
 *.enc
 
-# Block all local databases
+# Databases
 *.db
 *.sqlite
 *.sqlite3
 
-# --- Project Structure & Dependencies ---
+# Environment secrets
+.env
+.env.*
+!.env.example
 
-# Editor / IDE
+# =========================================================
+# 🧠 EDITOR / OS FILES
+# =========================================================
+
 .vscode/
 .idea/
 .cursor/
@@ -26,7 +35,10 @@ Thumbs.db
 ehthumbs.db
 Desktop.ini
 
-# Root Dependencies (Global)
+# =========================================================
+# 📦 NODE / FRONTEND
+# =========================================================
+
 node_modules/
 dist/
 build/
@@ -34,57 +46,89 @@ coverage/
 .npm/
 .yarn/
 
-# Python (Global)
+frontend/node_modules/
+frontend/dist/
+frontend/playwright-report/
+frontend/test-results/
+frontend/playwright/.auth/
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# =========================================================
+# 🐍 PYTHON / BACKEND
+# =========================================================
+
 __pycache__/
 *.py[cod]
 *$py.class
+
 venv/
 .venv/
 env/
-.env
-.env.*
+
 .pytest_cache/
 htmlcov/
 site/
 
-# --- Specific Backend Ignores ---
+# Flask instance
 backend/instance/
-backend/benchmark_results.csv
-backend/test_record_v1.txt
-backend/app/services/audit/*.log
 
-# Backend Cloud Storage (Simulation)
-# Allow structure (.gitkeep) but block content
+# Logs
+*.log
+logs/
+
+# =========================================================
+# ☁️ CLOUD STORAGE (SIMULATION DATA)
+# Keep structure, ignore contents
+# =========================================================
+
 backend/cloud/keys/*
 !backend/cloud/keys/.gitkeep
+
 backend/cloud/data/*
 !backend/cloud/data/.gitkeep
+
 backend/cloud/meta/*
 !backend/cloud/meta/.gitkeep
-# Fallback
+
+# fallback safety
 backend/cloud/*
 !backend/cloud/.gitkeep
 
-# --- Specific Frontend Ignores ---
-# (Most are covered by global rules like node_modules, dist, .env)
-frontend/npm-debug.log*
-frontend/yarn-debug.log*
-frontend/yarn-error.log*
-
-# --- Root Cloud Directory (Legacy/Global) ---
+# Root-level cloud (legacy)
 cloud/keys/*
 !cloud/keys/.gitkeep
+
 cloud/data/*
 !cloud/data/.gitkeep
+
 cloud/meta/*
 !cloud/meta/.gitkeep
+
 cloud/*
 !cloud/.gitkeep
 
-# --- Miscellaneous ---
-logs/
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
+# =========================================================
+# 📊 GENERATED / RUNTIME FILES
+# =========================================================
+
+backend/benchmark_results.csv
+backend/test_record_v1.txt
+
+# Audit logs (sensitive)
+backend/app/services/audit/*.log
+
+# =========================================================
+# 🧪 TEST ARTIFACTS
+# =========================================================
+
+playwright-report/
+test-results/
+
+# =========================================================
+# 📄 PRIVATE / LOCAL FILES
+# =========================================================
+
 private_reference.md

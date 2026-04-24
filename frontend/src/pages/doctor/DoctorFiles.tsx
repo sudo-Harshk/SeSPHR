@@ -106,7 +106,7 @@ function PREProofCard({ filename, originalKeyBlob, reencryptedKeyBlob, fileSize,
                 <p className="font-mono text-xs text-slate-700">{debugInfo.policy}</p>
               </div>
 
-              <div className="space-y-1.5">
+              <div className="space-y-1.5" data-testid="pre-step-timings">
                 {debugInfo.steps.map((step, i) => (
                   <div key={i} className="flex items-center justify-between rounded-md bg-white border border-slate-100 px-3 py-1.5">
                     <div className="flex items-center gap-2">
@@ -120,10 +120,10 @@ function PREProofCard({ filename, originalKeyBlob, reencryptedKeyBlob, fileSize,
 
               <div className="rounded-md bg-purple-100 border border-purple-200 px-3 py-2 text-xs text-purple-800">
                 <span className="font-semibold">Key Before (SRS): </span>
-                <span className="font-mono">{debugInfo.key_blob_srs}</span>
+                <span className="font-mono" data-testid="key-before">{debugInfo.key_blob_srs}</span>
                 <br />
                 <span className="font-semibold">Key After (Doctor): </span>
-                <span className="font-mono">{debugInfo.key_blob_doctor}</span>
+                <span className="font-mono" data-testid="key-after">{debugInfo.key_blob_doctor}</span>
               </div>
 
               <p className="text-xs text-slate-500 font-medium">{debugInfo.note}</p>
@@ -167,16 +167,22 @@ function PREProofCard({ filename, originalKeyBlob, reencryptedKeyBlob, fileSize,
           </div>
 
           {fileSize != null && (
-            <div className="rounded-lg bg-blue-50 border border-blue-200 px-3 py-2 flex items-center justify-between">
+            <div
+              className="rounded-lg bg-blue-50 border border-blue-200 px-3 py-2 flex items-center justify-between"
+              data-testid="key-flow-file-size"
+            >
               <span className="text-xs text-blue-700 font-medium">File size before → after SRS:</span>
-              <span className="font-mono text-xs text-blue-900 font-bold">
+              <span
+                className="font-mono text-xs text-blue-900 font-bold"
+                data-testid="key-flow-file-size-values"
+              >
                 {formatBytes(fileSize)} → {formatBytes(fileSize)}
               </span>
             </div>
           )}
 
           <div className="rounded-md bg-green-100 border border-green-300 px-3 py-2">
-            <p className="text-xs text-green-900 font-bold">
+            <p className="text-xs text-green-900 font-bold" data-testid="key-flow-claim">
               Only 32-byte AES key changes. File remains unchanged.
             </p>
           </div>
@@ -913,6 +919,7 @@ export default function DoctorFiles() {
                           <Button
                             variant="default"
                             size="sm"
+                            data-testid={`request-access-${file.filename}`}
                             onClick={() => handleView(file.filename)}
                             disabled={!canView || isGlobalLoading}
                             title={

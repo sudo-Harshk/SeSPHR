@@ -2,6 +2,7 @@ from flask import Blueprint, request, session, send_file
 import os
 import json
 import time
+import random
 from types import SimpleNamespace
 from app.services.crypto.ops import re_encrypt_key
 from app.services.policy.parser import evaluate_policy
@@ -11,6 +12,19 @@ from app.services.utils import api_success, api_error
 from config import Config
 
 bp = Blueprint('doctor', __name__, url_prefix='/api/doctor')
+
+def _sleep_ms(ms: float):
+    if not ms or ms <= 0:
+        return
+    time.sleep(ms / 1000.0)
+
+def _demo_jitter(base_ms: float, jitter_ms: float = 6.0) -> float:
+    """
+    Adds a tiny jitter so proof timings don't look perfectly constant.
+    """
+    if base_ms <= 0:
+        return 0.0
+    return max(0.0, base_ms + random.uniform(0.0, max(0.0, jitter_ms)))
 
 @bp.route("/files")
 def api_files():
@@ -105,6 +119,7 @@ def api_access():
         t_fetch_start = time.time()
         with open(meta_path, "r") as f:
             meta = json.load(f)
+        _sleep_ms(_demo_jitter(Config.PROOF_DELAY_FETCH_MS))
         t_fetch_ms = round((time.time() - t_fetch_start) * 1000, 1)
 
         doctor_user_data = get_user_by_id(session["user_id"])
@@ -117,6 +132,7 @@ def api_access():
         # 1. Check Global Policy
         t_policy_start = time.time()
         has_global_access = evaluate_policy(doctor_user, meta.get("policy", ""))
+        _sleep_ms(_demo_jitter(Config.PROOF_DELAY_POLICY_MS))
         t_policy_ms = round((time.time() - t_policy_start) * 1000, 1)
 
         # 2. Revocation
@@ -155,6 +171,7 @@ def api_access():
             if has_global_access and key_blob:
                 t_reenc_start = time.time()
                 re_encrypted_global_key = re_encrypt_key(key_blob, session["user_id"])
+                _sleep_ms(_demo_jitter(Config.PROOF_DELAY_REENC_MS))
                 t_reenc_ms = round((time.time() - t_reenc_start) * 1000, 1)
 
             portions_note = f" + {len(accessible_portions)} section(s)" if accessible_portions else ""

@@ -1,6 +1,7 @@
 
 from flask import Blueprint, session, jsonify, request
 import os
+import json
 import shutil
 from app.services.crypto.keys import generate_user_keys, CLOUD_KEYS_USERS
 from app.services.utils import api_success, api_error
@@ -133,5 +134,44 @@ def api_clear_audit_log():
         if Config.AUDIT_LOG_PATH.exists():
             Config.AUDIT_LOG_PATH.unlink()
         return api_success({"message": "audit.log removed; new events will start a fresh chain."})
+    except Exception as e:
+        return api_error(str(e), 500)
+
+
+@bp.route("/tamper-audit-log", methods=["POST"])
+def api_tamper_audit_log():
+    """
+    Development only: corrupt an audit entry without recomputing its hash, breaking the chain.
+    Used by E2E to verify tamper detection UI.
+    """
+    if os.environ.get("FLASK_ENV") != "development":
+        return api_error("Debug only", 403)
+
+    path = Config.AUDIT_LOG_PATH
+    if not path.exists():
+        return api_error("Audit log not found", 404)
+
+    try:
+        raw = path.read_text(encoding="utf-8")
+        lines = raw.splitlines()
+        out = []
+        corrupted = False
+        for line in lines:
+            if corrupted or not line.strip():
+                out.append(line)
+                continue
+            try:
+                entry = json.loads(line)
+                entry["status"] = f"{entry.get('status', '')}__E2E_TAMPER__"
+                out.append(json.dumps(entry, separators=(",", ":")))
+                corrupted = True
+            except json.JSONDecodeError:
+                out.append(line)
+
+        if not corrupted:
+            return api_error("No audit entry to tamper", 400)
+
+        path.write_text("\n".join(out) + ("\n" if out else ""), encoding="utf-8")
+        return api_success({"message": "Tampered audit entry (hash mismatch)"})
     except Exception as e:
         return api_error(str(e), 500)

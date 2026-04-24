@@ -153,6 +153,7 @@ export default function AdminBenchmark() {
             </p>
           </div>
           <Button
+            data-testid="benchmark-run"
             onClick={runLiveBenchmark}
             disabled={running || loading}
             className="gap-2 bg-purple-600 hover:bg-purple-700 text-white"
@@ -189,6 +190,8 @@ export default function AdminBenchmark() {
                   RSA-PRE
                 </button>
                 <button
+                  type="button"
+                  data-testid="benchmark-mode-cpabe"
                   className={`px-5 py-2 border-l border-slate-200 transition-colors ${
                     cryptoMode === "cpabe"
                       ? "bg-amber-500 text-white"
@@ -203,6 +206,7 @@ export default function AdminBenchmark() {
 
             {cryptoMode === "cpabe" && (
               <motion.div
+                data-testid="cpabe-simulation-warning"
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 className="mt-4 rounded-lg border-2 border-amber-400 bg-amber-50 p-4"
@@ -253,7 +257,7 @@ export default function AdminBenchmark() {
                   SRS processes only 32-byte AES key, never the file.
                 </p>
                 <div className="grid grid-cols-2 gap-3 mt-2">
-                  <div className="rounded-lg bg-white border border-blue-200 px-4 py-3">
+                  <div className="rounded-lg bg-white border border-blue-200 px-4 py-3" data-testid="benchmark-on">
                     <p className="text-xs text-blue-500 uppercase tracking-wide font-medium mb-1">File Encryption</p>
                     <p className="font-bold text-blue-700 text-lg">O(n)</p>
                     <p className="text-xs text-slate-600">Grows with file size</p>
@@ -261,7 +265,7 @@ export default function AdminBenchmark() {
                       10 MB → ~{largestEncMs} ms
                     </p>
                   </div>
-                  <div className="rounded-lg bg-white border border-purple-200 px-4 py-3">
+                  <div className="rounded-lg bg-white border border-purple-200 px-4 py-3" data-testid="benchmark-o1">
                     <p className="text-xs text-purple-500 uppercase tracking-wide font-medium mb-1">Re-encryption</p>
                     <p className="font-bold text-purple-700 text-lg">O(1)</p>
                     <p className="text-xs text-slate-600">Constant regardless of file size</p>
@@ -320,7 +324,7 @@ export default function AdminBenchmark() {
                   <span className="text-green-600 font-medium">Decryption: O(n)</span>
                 </CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent data-testid="benchmark-bar-chart">
                 <ResponsiveContainer width="100%" height={320}>
                   <BarChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />

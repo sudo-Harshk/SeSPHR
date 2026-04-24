@@ -23,6 +23,12 @@ class Config:
     SECRET_KEY = os.environ.get("SECRET_KEY", "sesphr-secret-key-prod")
     SESSION_COOKIE_SAMESITE = "Lax"
     SESSION_COOKIE_SECURE = False # Dev default
+
+    # Optional artificial delays (ms) to make demo/proof timings feel realistic.
+    # Keep these at 0 in production unless you explicitly want them.
+    PROOF_DELAY_FETCH_MS = float(os.environ.get("PROOF_DELAY_FETCH_MS", "0"))
+    PROOF_DELAY_POLICY_MS = float(os.environ.get("PROOF_DELAY_POLICY_MS", "0"))
+    PROOF_DELAY_REENC_MS = float(os.environ.get("PROOF_DELAY_REENC_MS", "0"))
     
     @staticmethod
     def init_app(app):

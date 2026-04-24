@@ -1,223 +1,100 @@
-# SeSPHR: Secure Sharing of Personal Health Records in the Cloud
+# SeSPHR - browser-encrypted PHR sharing with policy-gated key release
 
-Implementation of the methodology described in:
-> *"SeSPHR: A Methodology for Secure Sharing of Personal Health Records in the Cloud"*
-> Mazhar Ali, Assad Abbas, Muhammad Usman Shahid Khan, Samee U. Khan — IEEE
+## Overview
 
----
+SeSPHR is a prototype system for sharing Personal Health Records (PHRs) through an untrusted cloud without uploading plaintext.  
+Patients encrypt files in the browser and upload only ciphertext.  
+Doctors request access; the server enforces policy and releases only the decryption key material needed for authorized users.
 
-## What This Project Does
+## Problem
 
-A patient stores their health record on an **untrusted cloud server** — encrypted. A semi-trusted proxy called the **SRS (Setup and Re-encryption Server)** decides who can decrypt what, based on policies the patient defines. The patient controls access. The cloud never sees plaintext. Decryption happens entirely in the doctor's browser.
+- Cloud storage providers can see plaintext unless encryption happens before upload
+- Sharing often requires duplicating or re-uploading data per recipient
+- Access control and revocation are hard to manage once data leaves the patient
 
-**Core security properties implemented:**
-- Patient-centric access control — the patient sets policy, not the hospital
-- Proxy re-encryption — SRS transforms the key for the authorised user without exposing plaintext
-- Forward/backward access control — revoke and restore access without re-encrypting files
-- Strict ownership isolation — each patient can only view and manage their own records
-- Tamper-evident audit log — SHA-256 hash chain detects any modification to access records
+## Solution
 
----
+- Encrypt in the browser; store only ciphertext in the cloud
+- Gate access at the server by transforming/releasing keys (not moving data)
+- Record access and admin actions with a tamper-evident audit trail
+
+## Key Features
+
+- Browser-side file encryption/decryption
+- Policy-based access checks for key release
+- Key transformation flow for authorized recipients
+- Admin audit logs with integrity verification
+- Admin benchmark endpoint + UI for measuring crypto costs
+- Pytest backend tests and Playwright E2E tests
 
 ## Architecture
 
-```
-Browser (Patient/Doctor) → nginx :5173
-                               ├── /            React SPA
-                               └── /api/...  → Flask Backend :5000
-                                                   ├── Policy Engine
-                                                   ├── SRS Re-encryption
-                                                   ├── SQLite (users + attributes)
-                                                   └── Cloud Storage (encrypted files)
-```
+* Browser (trusted)
+* Cloud (untrusted)
+* SRS (semi-trusted)
 
-See [`docs/architecture.md`](docs/architecture.md) for full Mermaid diagrams covering:
-- System entities and data flow
-- PHR upload sequence
-- Access request and re-encryption sequence
-- Proxy re-encryption key transform
-- Audit log hash chain
+- [architecture.md](architecture/architecture.md)
 
----
+## How It Works
 
-## Quick Start — Docker (Recommended)
 
-Requires [Docker Desktop](https://www.docker.com/products/docker-desktop/). No Python or Node needed on the host.
-
-```bash
-docker compose up --build
-```
-
-Open **http://localhost:5173**
-
-Demo accounts are created automatically on first boot:
-
-| Email | Password | Role | Attributes |
-|---|---|---|---|
-| `patient1@demo.com` | `Demo@1234` | Patient | — |
-| `patient2@demo.com` | `Demo@1234` | Patient | — |
-| `dr_cardio@demo.com` | `Demo@1234` | Doctor | Dept: Cardiology |
-| `dr_ortho@demo.com` | `Demo@1234` | Doctor | Dept: Orthopedics |
-| `admin@demo.com` | `Demo@1234` | Admin | — |
-
-Data persists across restarts. To fully reset:
-```bash
-docker compose down -v
-docker compose up --build
-```
-
----
-
-## Manual Setup (Without Docker)
-
-### Prerequisites
-- Python 3.10+
-- Node.js 18+
-
-### Backend
-
-```bash
-cd backend
-python -m venv venv
-
-# Windows
-.\venv\Scripts\activate
-# Mac / Linux
-source venv/bin/activate
-
-pip install -r requirements.txt
-python seed_demo_users.py   # creates DB tables + demo accounts
-python run.py               # starts Flask at http://localhost:5000
-```
-
-### Frontend
-
-```bash
-cd frontend
-npm install
-npm run dev                 # starts Vite at http://localhost:5173
-```
-
----
-
-## Features
-
-### Patient
-- Upload PHR files encrypted with AES-256-GCM directly in the browser — plaintext never leaves the device
-- Define an access policy using presets or a custom boolean expression (e.g. `Role:Doctor AND Dept:Cardiology`)
-- Each patient sees only their own records — strict ownership enforcement at the API level
-- Revoke access for a specific doctor or the entire file without re-encrypting
-- Restore access at any time
-
-### Doctor
-- View available health records
-- Request access — SRS evaluates policy against the doctor's attributes
-- Animated SRS processing steps shown live during access request
-- Decryption happens entirely in the browser — plaintext never sent over the network
-- Cryptographic proof panel: shows original key blob vs re-encrypted key blob side by side
-
-### Admin
-- Manage users and assign attributes (`Role`, `Dept`, `Speciality`, etc.)
-- View the tamper-evident audit log with SHA-256 hash chain integrity verification
-  - Displays user name, role, and department per entry — no raw UUIDs
-  - Each row shows GRANTED / DENIED with reason (policy mismatch, revoked, not authenticated)
-- View performance benchmark charts (encryption, SRS re-encryption, decryption times vs file size)
-
----
-
-## Policy Engine
-
-Policies are boolean attribute expressions evaluated server-side by the SRS:
-
-```
-Role:Doctor AND Dept:Cardiology
-(Role:Doctor AND Dept:Cardiology) OR Role:Admin
-Role:Doctor OR Role:Pharmacist
-Role:Admin
-```
-
-Attributes are assigned to users by the admin. The policy engine supports `AND`, `OR`, and parentheses.
-
----
-
-## Project Structure
-
-```
-sesphr/
-├── docker-compose.yml
-├── backend/
-│   ├── Dockerfile
-│   ├── app/
-│   │   ├── api/
-│   │   │   ├── auth.py          # Login, signup, session
-│   │   │   ├── patient.py       # Upload, revoke, grant
-│   │   │   ├── doctor.py        # Access request, download
-│   │   │   └── admin.py         # Users, audit, benchmark
-│   │   └── services/
-│   │       ├── crypto/
-│   │       │   ├── keys.py      # RSA key generation (SRS + users)
-│   │       │   └── ops.py       # Proxy re-encryption (SRS core)
-│   │       ├── policy/
-│   │       │   └── parser.py    # Boolean attribute policy engine
-│   │       ├── audit/
-│   │       │   └── logger.py    # SHA-256 hash-chained audit log
-│   │       └── storage/
-│   │           ├── users.py     # SQLite user + attribute CRUD
-│   │           └── phr.py       # Encrypted PHR file store
-│   ├── seed_demo_users.py       # Creates demo accounts (safe to re-run)
-│   ├── reset_demo.py            # Wipes cloud files and audit log, preserves accounts
-│   └── tests/
-│       └── benchmark_suite.py   # Performance benchmarks
-├── frontend/
-│   ├── Dockerfile
-│   ├── nginx.conf
-│   └── src/
-│       ├── pages/
-│       │   ├── patient/         # Upload, manage, revoke
-│       │   ├── doctor/          # Request access, view, download
-│       │   └── admin/           # Users, audit, benchmark charts
-│       └── utils/
-│           ├── crypto.ts        # Web Crypto API wrappers (AES-GCM + RSA-OAEP)
-│           └── policy.ts        # Client-side policy preview
-├── cloud/                       # Simulated cloud storage (created at runtime)
-│   ├── data/                    # .enc files (AES-GCM ciphertext)
-│   ├── meta/                    # .json metadata (policy, key_blob, portions)
-│   └── keys/                    # RSA key pairs (PEM)
-└── docs/
-    ├── architecture.md          # Mermaid architecture diagrams
-    └── demo-guide.md            # Step-by-step demo script with panel Q&A
-```
-
----
+1. Patient uploads a file (encrypted in the browser)
+2. Ciphertext + minimal metadata are stored in the cloud
+3. Doctor requests access; server enforces policy and releases/transforms key material
+4. Doctor decrypts the file locally in the browser
 
 ## Performance
 
-Benchmarks measured across file sizes from 100 KB to 10 MB:
+The admin benchmark measures end-to-end crypto costs.  
+File encryption scales with file size, while the key-release step is designed to be independent of file size.
 
-| File Size | Encryption (AES-GCM) | SRS Re-encryption | Decryption |
-|---|---|---|---|
-| 100 KB | 11.87 ms | 204.44 ms | 67.26 ms |
-| 1 MB | 5.81 ms | 198.00 ms | 77.35 ms |
-| 5 MB | 12.20 ms | 180.54 ms | 81.57 ms |
-| 10 MB | 26.47 ms | 183.38 ms | 95.48 ms |
+## Limitations
 
-**Key result:** SRS re-encryption time is constant (~190 ms) regardless of file size — because the SRS only re-encrypts the 32-byte AES key, not the file itself.
+- Semi-trusted server sees key material during transformation/release
+- No production hardening (e.g., TLS, HSM, rotation) in this repo
+- Some components are simplified/simulated for a prototype
+- Revocation can’t “undo” data already downloaded and decrypted
 
-Run benchmarks:
+## Setup
+
+### Backend
 ```bash
-python backend/tests/benchmark_suite.py
+cd backend
+python -m venv venv
+.\venv\Scripts\activate
+pip install -r requirements.txt
+python seed_demo_users.py
+$env:FLASK_ENV="development"
+python run.py
 ```
 
----
+### Frontend
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-## Tech Stack
+## Run Tests
 
-| Layer | Technology |
-|---|---|
-| Frontend | React 19, TypeScript, Vite, Tailwind CSS, Framer Motion, Recharts |
-| Crypto (browser) | Web Crypto API — AES-256-GCM + RSA-OAEP |
-| Backend | Flask (Python 3.11) |
-| Crypto (server) | PyCryptodome — RSA-OAEP |
-| Auth | Argon2 password hashing, Flask sessions |
-| Database | SQLite |
-| Containerisation | Docker, nginx |
+```bash
+# Make
+make test
+
+# PowerShell
+pwsh ./scripts/test_all.ps1
+
+# Bash
+bash ./scripts/test_all.sh
+```
+
+## Demo Credentials
+
+- Admin: `admin@demo.com` / `Demo@1234`
+- Patient: `patient1@demo.com` / `Demo@1234`
+- Doctor: `dr_cardio@demo.com` / `Demo@1234`
+
+## Conclusion
+
+SeSPHR demonstrates a practical pattern for cloud-hosted record sharing: encrypt client-side, store ciphertext, and control access via server-gated key release.  
+It’s intended for demos and evaluation rather than production deployment.

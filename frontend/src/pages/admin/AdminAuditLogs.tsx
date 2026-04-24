@@ -171,7 +171,12 @@ export default function AdminAuditLogs() {
       </div>
 
       {/* Prominent Tamper Detection Badge */}
-      <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.3 }}>
+      <motion.div
+        data-testid="audit-status"
+        initial={{ opacity: 0, scale: 0.97 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.3 }}
+      >
         {integrityStatus === "verifying" && (
           <div className="flex items-center gap-4 rounded-xl border border-blue-200 bg-blue-50 px-6 py-5">
             <Loader2 className="h-8 w-8 animate-spin text-blue-500 shrink-0" />

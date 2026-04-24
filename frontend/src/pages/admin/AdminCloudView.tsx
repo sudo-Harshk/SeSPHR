@@ -31,11 +31,18 @@ const formatBytes = (bytes: number) => {
 }
 
 function MetaPanel({ meta }: { meta: CloudFile["raw_meta"] }) {
-  const fields = [
+  const fields: Array<{
+    key: string
+    value: string
+    label: string
+    color: string
+    testid?: string
+  }> = [
     {
       key: "key_blob",
       value: meta.key_blob,
       label: "Encrypted AES key (cryptographic, not data)",
+      testid: "cloud-meta-key-blob",
       color: "text-purple-700",
     },
     {
@@ -43,6 +50,7 @@ function MetaPanel({ meta }: { meta: CloudFile["raw_meta"] }) {
       value: meta.iv,
       label: "Initialization vector",
       color: "text-blue-700",
+      testid: "cloud-meta-iv",
     },
     {
       key: "policy",
@@ -79,7 +87,7 @@ function MetaPanel({ meta }: { meta: CloudFile["raw_meta"] }) {
         <div className="font-mono text-xs space-y-2">
           <span className="text-slate-400">{"{"}</span>
           {fields.map((f) => (
-            <div key={f.key} className="pl-4 flex flex-col gap-0.5">
+            <div key={f.key} className="pl-4 flex flex-col gap-0.5" data-testid={f.testid}>
               <div>
                 <span className="text-slate-500">&quot;{f.key}&quot;</span>
                 <span className="text-slate-400">: </span>
@@ -257,6 +265,7 @@ export default function AdminCloudView() {
                               variant="ghost"
                               size="sm"
                               className="h-7 text-xs gap-1"
+                              data-testid={`cloud-inspect-${file.filename}`}
                               onClick={() => toggleExpanded(file.filename)}
                             >
                               {expanded.has(file.filename) ? (

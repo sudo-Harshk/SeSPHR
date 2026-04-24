@@ -585,6 +585,7 @@ export default function PatientFiles() {
                 <div className="flex items-center gap-2">
                   <Input
                     id="file-input"
+                    data-testid="patient-file-input"
                     type="file"
                     onChange={handleFileChange}
                     className="cursor-pointer"
@@ -628,6 +629,7 @@ export default function PatientFiles() {
                   ))}
                 </div>
                 <Input
+                  data-testid="patient-policy-input"
                   value={globalPolicy}
                   onChange={(e) => updateGlobalPolicy(e.target.value)}
                   placeholder="e.g. Role:Doctor AND Dept:Cardiology"
@@ -693,6 +695,7 @@ export default function PatientFiles() {
 
               <Button
                 type="submit"
+                data-testid="patient-upload-submit"
                 className="w-full sm:w-auto"
                 disabled={uploading || !selectedFile}
               >

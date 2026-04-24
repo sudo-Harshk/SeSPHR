@@ -1,0 +1,1 @@
+SeSPHR E2E seed file — deterministic plaintext for patient upload flow.

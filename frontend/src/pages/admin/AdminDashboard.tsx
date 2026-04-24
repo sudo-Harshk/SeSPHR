@@ -377,7 +377,11 @@ export default function AdminDashboard() {
                   { threat: "Malicious SRS", reason: "SRS sees AES key in memory (trusted assumption)" },
                   { threat: "Network attacker (no TLS)", reason: "Transport security is a separate concern" },
                 ].map((item) => (
-                  <div key={item.threat} className="flex items-start gap-3 rounded-md bg-red-50 border border-red-200 px-3 py-2">
+                  <div
+                    key={item.threat}
+                    data-testid={item.threat === "Malicious SRS" ? "dashboard-threat-srs" : undefined}
+                    className="flex items-start gap-3 rounded-md bg-red-50 border border-red-200 px-3 py-2"
+                  >
                     <ShieldX className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
                     <div>
                       <span className="text-sm font-semibold text-red-800">{item.threat}</span>
@@ -426,7 +430,10 @@ export default function AdminDashboard() {
             <div className="rounded-lg border bg-slate-50 p-4">
               <ArchitectureDiagram />
             </div>
-            <p className="mt-2 text-center text-xs text-slate-500 font-medium">
+            <p
+              className="mt-2 text-center text-xs text-slate-500 font-medium"
+              data-testid="dashboard-arch-decryption-browser"
+            >
               Decryption happens only in browser — ciphertext never leaves the cloud unencrypted.
             </p>
           </CardContent>
